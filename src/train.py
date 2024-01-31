@@ -64,7 +64,7 @@ def main(model_name, dataset):
     val_labels = val_labels.reset_index(drop=True)
 
     model, tokenizer = load_model_Classification(
-        model_name, data_raw['labels'].nunique())
+        model_name, data_raw['label'].nunique())
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model.to(device)
 
