@@ -75,7 +75,7 @@ def main(model_name, dataset):
 
     optimizer = AdamW(model.parameters(), lr=2e-5)
 
-    epochs = 3
+    epochs = 1
     for epoch in range(epochs):
         train_loss = train(model, train_loader, optimizer, device)
         val_loss, val_accuracy = evaluate(model, val_loader, device)
