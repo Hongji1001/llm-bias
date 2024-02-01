@@ -49,7 +49,10 @@ def load_adult():
         [f"{column}:{value}" for column, value in row.items()]), axis=1)
     data_raw['label'] = data_raw['income'].apply(
         lambda x: 0 if x == '<=50K' else 1)
-    data_raw = data_raw[['text', 'label']]
+    data_raw = data_raw[['text', 'label', 'sex']]
+    data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1})
+    data_raw = data_raw.rename(
+        columns={'sex': 'sensitive'})
     return data_raw
 
 

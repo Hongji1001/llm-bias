@@ -62,3 +62,11 @@ def load_model_Classification(name="bert", num_labels=2):
         tokenizer = DistilBertTokenizer.from_pretrained(
             'distilbert-base-uncased')
     return model, tokenizer
+
+
+def load_model_sequence_pretrain(path, name="bert"):
+    if name == "bert":
+        model = BertForSequenceClassification.from_pretrained(
+            path, local_files_only=True)
+        tokenizer = BertTokenizer.from_pretrained('bert-base-uncased')
+    return model, tokenizer
