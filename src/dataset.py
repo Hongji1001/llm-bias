@@ -63,7 +63,7 @@ def load_acs_i():
     data_source = ACSDataSource(
         survey_year='2018', horizon='1-Year', survey='person')
     ca_data = data_source.get_data(states=["CA"], download=True)
-    ca_data = ca_data.sample(frac=0.2, random_state=42)
+    ca_data = ca_data.sample(frac=0.15, random_state=42)
     ca_features, ca_labels, _ = ACSIncome.df_to_pandas(
         ca_data, categories=ACSIncome_categories, dummies=False)
     ca_features = ca_features.rename(columns={'COW': 'Class of worker', 'SCHL': 'Educational attainment',
@@ -71,7 +71,7 @@ def load_acs_i():
     ca_features['text'] = ca_features.apply(lambda row: ', '.join(
         [f"{column}:{value}" for column, value in row.items()]), axis=1)
     ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
-    ca_features['label'] = ca_labels
+    ca_features['label'] = ca_labels.replace({'False':0, 'True': 1}).astype(int)
     ca_features = ca_features[['text', 'label', 'SEX']]
     ca_features = ca_features.rename(
         columns={'SEX': 'sensitive'})
