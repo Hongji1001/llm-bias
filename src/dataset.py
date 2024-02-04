@@ -53,6 +53,7 @@ def load_adult():
     data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1}).astype(int)
     data_raw = data_raw.rename(
         columns={'sex': 'sensitive'})
+    print(data_raw)
     return data_raw
 
 
@@ -62,7 +63,7 @@ def load_acs_i():
     data_source = ACSDataSource(
         survey_year='2018', horizon='1-Year', survey='person')
     ca_data = data_source.get_data(states=["CA"], download=True)
-
+    ca_data = ca_data.sample(frac=0.2, random_state=42)
     ca_features, ca_labels, _ = ACSIncome.df_to_pandas(
         ca_data, categories=ACSIncome_categories, dummies=False)
     ca_features = ca_features.rename(columns={'COW': 'Class of worker', 'SCHL': 'Educational attainment',
@@ -74,6 +75,7 @@ def load_acs_i():
     ca_features = ca_features[['text', 'label', 'SEX']]
     ca_features = ca_features.rename(
         columns={'SEX': 'sensitive'})
+    print(ca_features)
     return ca_features
 
 
@@ -261,4 +263,4 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
 
 
 if __name__ == '__main__':
-   load_md_gender()
+   load_acs_i()
