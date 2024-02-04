@@ -1,6 +1,7 @@
 import torch
 import argparse
 import numpy as np
+import pandas as pd
 from tqdm import tqdm
 from dataset import AdultDataset, data_loader
 from model import load_model_Classification, load_model_sequence_pretrain
@@ -8,7 +9,7 @@ from torch.optim import AdamW
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
 from torch.utils.data import DataLoader
-from metrics import equal_opportunity, kld
+from metrics import eod, kld, spd
 
 
 def train(model, data_loader, optimizer, device):
@@ -75,21 +76,25 @@ def test(model, data_loader, device, sensitive_list):
             
             predictions.extend(torch.argmax(logits, dim=1).tolist())
             true_labels.extend(labels.tolist())
-            
+    
+    print(predictions)
     target_hat_list = np.concatenate(target_hat_list, axis=0)
-    print(target_hat_list)
-    print(np.array(true_labels))
-    print(sensitive_list)
+    # print(target_hat_list)
+    # print(np.array(true_labels))
+    # print(sensitive_list)
     report = classification_report(true_labels, predictions)  # Adjust class names as needed
-    print("eodd: ", equal_opportunity(target_hat_list, np.array(true_labels), np.array(sensitive_list), 0.5))
+    eod(target_hat_list, np.array(true_labels), np.array(sensitive_list), 0.5)
     print("kld: ", kld(target_hat_list, np.array(sensitive_list)))
+    print("spd: ", spd(target_hat_list[:, 1], np.array(sensitive_list)))
     return report
 
 
-def main(model_name, dataset, status="train"):
+def main(model_name, dataset, status="train", name="bert"):
     data_raw = data_loader(dataset)
+    assert isinstance(data_raw, pd.DataFrame), "变量不是 Pandas DataFrame 数据类型"
+    data_raw = data_raw if torch.cuda.is_available() else data_raw.head(400)
     train_texts, val_texts, train_labels, val_labels, train_sensitive, val_sensitive = train_test_split(
-        data_raw['text'], data_raw['label'], data_raw['sensitive'], test_size=0.05, stratify=data_raw['sensitive'])
+        data_raw['text'], data_raw['label'], data_raw['sensitive'], test_size=0.2, stratify=data_raw['sensitive'])
     train_texts = train_texts.reset_index(drop=True)
     train_labels = train_labels.reset_index(drop=True)
     val_texts = val_texts.reset_index(drop=True)
@@ -101,17 +106,17 @@ def main(model_name, dataset, status="train"):
 
     if status == "train":
         model, tokenizer = load_model_Classification(
-            model_name, data_raw['label'].nunique())
+            model_name, data_raw['label'].max()+1)
         model.to(device)
 
         train_dataset = AdultDataset(train_texts, train_labels, tokenizer)
-        train_loader = DataLoader(train_dataset, batch_size=16, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
         val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
-        val_loader = DataLoader(val_dataset, batch_size=16)
+        val_loader = DataLoader(val_dataset, batch_size=4)
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
 
-        epochs = 1
+        epochs = 3
         for epoch in range(epochs):
             train_loss = train(model, train_loader, optimizer, device)
             val_loss, val_accuracy = evaluate(model, val_loader, device)
@@ -124,12 +129,13 @@ def main(model_name, dataset, status="train"):
         model.save_pretrained(path)
     else:
         model, tokenizer = load_model_sequence_pretrain(
-            path=model_name, name='bert')
+            path=model_name, name=name)
         model.to(device)
         val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size=16)
         report = test(model, val_loader, device, val_sensitive.to_numpy())
         print(report)
+        pass
 
 
 if __name__ == '__main__':
@@ -143,8 +149,16 @@ if __name__ == '__main__':
     # Add an argument for the dataset, this is also a required argument
     parser.add_argument('--dataset', type=str, required=False,
                         help='The name of the dataset to use')
+    
+    # Add an argument for the status, this is also a required argument
+    parser.add_argument('--status', type=str, required=False,
+                        help='The status of llm')
+    
+    # Add an argument for the name of pre-trained model, this is also a required argument
+    parser.add_argument('--name', type=str, required=False,
+                        help='The name of pre-trained model')
 
     # Parse the arguments
     args = parser.parse_args()
 
-    main(args.model, args.dataset, status="train")
+    main(args.model, args.dataset, args.status, args.name)

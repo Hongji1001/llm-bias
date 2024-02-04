@@ -1,12 +1,14 @@
 import yaml
 import pandas as pd
 import numpy as np
+from pathlib import Path
 import torch
 from torch.utils.data import Dataset
 from sklearn.model_selection import train_test_split
 from datasets import load_dataset
 from folktables import ACSDataSource, ACSIncome
 
+script_dir = Path(__file__).resolve().parent
 
 class AdultDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len=256):
@@ -41,8 +43,6 @@ class AdultDataset(Dataset):
 
 
 def load_adult():
-    # data_raw = pd.read_csv(
-    #    "/home/hx84/llm-bias/dataset/adults/adult/Source/adult.data", sep=",\s*", nrows=1000, header=None, names=["age", "workclass", "fnlwgt", "education", "education.num", "marital.status", "occupation", "relationship", "race", "sex", "capital.gain", "capital.loss", "hours.per.week", "native.country", "income"])
     data_raw = load_dataset("scikit-learn/adult-census-income")['train']
     data_raw = data_raw.to_pandas()
     data_raw['text'] = data_raw.iloc[:, :-1].apply(lambda row: ', '.join(
@@ -50,14 +50,14 @@ def load_adult():
     data_raw['label'] = data_raw['income'].apply(
         lambda x: 0 if x == '<=50K' else 1)
     data_raw = data_raw[['text', 'label', 'sex']]
-    data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1})
+    data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1}).astype(int)
     data_raw = data_raw.rename(
         columns={'sex': 'sensitive'})
     return data_raw
 
 
 def load_acs_i():
-    with open('ACS.yaml', 'r') as yaml_file:
+    with open(script_dir / 'acs.yaml', 'r') as yaml_file:
         ACSIncome_categories = yaml.safe_load(yaml_file)
     data_source = ACSDataSource(
         survey_year='2018', horizon='1-Year', survey='person')
@@ -69,19 +69,20 @@ def load_acs_i():
                                               'MAR': 'Marital status', 'OCCP': 'Occupation', 'POBP': 'Place of birth', 'RAC1P': 'Race'})
     ca_features['text'] = ca_features.apply(lambda row: ', '.join(
         [f"{column}:{value}" for column, value in row.items()]), axis=1)
+    ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
     ca_features['label'] = ca_labels
-    ca_features = ca_features[['text', 'label']]
-    ca_features = ca_features.sample(frac=0.1, random_state=42)
+    ca_features = ca_features[['text', 'label', 'SEX']]
+    data_raw = data_raw.rename(
+        columns={'SEX': 'sensitive'})
     return ca_features
 
 
 def load_bios():
     data_raw = load_dataset("LabHC/bias_in_bios")['dev']
     data_raw = data_raw.to_pandas()
-    data_raw = data_raw[['hard_text', 'profession']]
+    # data_raw = data_raw[['hard_text', 'profession']]
     data_raw = data_raw.rename(
-        columns={'hard_text': 'text', 'profession': 'label'})
-    print(data_raw['text'].apply(len).max())
+        columns={'hard_text': 'text', 'profession': 'label', 'gender': 'sensitive'})
     print(data_raw)
     return data_raw
 
@@ -89,17 +90,35 @@ def load_bios():
 def load_md_gender():
     data_raw = load_dataset("md_gender_bias", "funpedia")['train']
     data_raw = data_raw.to_pandas()
+    data_raw = data_raw[data_raw['gender'] != 0]
+    data_raw['gender'] = data_raw['gender'].replace({'1': 0, '2': 1}).astype(int)
     data_raw['label'] = data_raw['gender']
-    data_raw = data_raw[['text', 'label']]
-    print(data_raw['text'].apply(len).max())
+    data_raw = data_raw[['text', 'label', 'gender']]
+    data_raw = data_raw.rename(
+        columns={'gender': 'sensitive'})
     print(data_raw)
-    pass
+    return data_raw
 
 
 def load_wikibias():
     data_raw = pd.read_csv('/home/hx84/llm-bias/dataset/wikibias/class_binary/train.tsv', delimiter='\t',
                            header=None, names=['text', 'none', 'label'], index_col=False)
-    data_raw = data_raw[['text', 'label']]
+    with open(script_dir / 'gender.yaml', 'r') as yaml_file:
+        binary_categories = yaml.safe_load(yaml_file)
+        
+    def classify_text(text, category_0_words, category_1_words):
+        male_present = any(word in text.split() for word in category_0_words)
+        female_present = any(word in text.split() for word in category_1_words)
+
+        if male_present and not female_present:
+            return 1
+        elif female_present and not male_present:
+            return 0
+        else:
+            return 2
+    data_raw['sensitive'] = data_raw['text'].apply(lambda x: classify_text(x, binary_categories['male'], binary_categories['female']))
+    data_raw = data_raw[data_raw['sensitive'] != 2]
+    data_raw = data_raw[['text', 'label', 'sensitive']]
     print(data_raw)
     return data_raw
 
@@ -107,15 +126,27 @@ def load_wikibias():
 def load_wiki_talk():
     data_raw = load_dataset("dirtycomputer/Wikipedia_Talk_Labels")['train']
     data_raw = data_raw.to_pandas()
-    print(len(data_raw))
     data_raw = data_raw[data_raw['comment'].apply(len) <= 1024]
-    print(len(data_raw))
-    data_raw = data_raw.sample(frac=0.2, random_state=42)
-    print(len(data_raw))
-    data_raw = data_raw[['comment', 'attack']]
+    # data_raw = data_raw.sample(frac=0.2, random_state=42)
+    with open(script_dir / 'gender.yaml', 'r') as yaml_file:
+        binary_categories = yaml.safe_load(yaml_file)
+        
+    def classify_text(text, category_0_words, category_1_words):
+        male_present = any(word in text.split() for word in category_0_words)
+        female_present = any(word in text.split() for word in category_1_words)
+
+        if male_present and not female_present:
+            return 1
+        elif female_present and not male_present:
+            return 0
+        else:
+            return 2
+    data_raw['sensitive'] = data_raw['comment'].apply(lambda x: classify_text(x, binary_categories['male'], binary_categories['female']))
+    data_raw = data_raw[data_raw['sensitive'] != 2]
     data_raw = data_raw.rename(
         columns={'comment': 'text', 'attack': 'label'})
-    data_raw['label'] = data_raw['label'].replace({False: 0, True: 1})
+    data_raw['label'] = data_raw['label'].replace({False: 0, True: 1}).astype(int)
+    data_raw = data_raw[['text', 'label', 'sensitive']]
     print(data_raw)
     return data_raw
 
@@ -224,10 +255,10 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
     elif dataset == "wikibias":
         return load_wikibias()
     elif dataset == "wiki_talk":
-        return load_md_gender()
+        return load_wiki_talk()
     else:
         print(f"{dataset} is not supported now")
 
 
 if __name__ == '__main__':
-    load_wikibias()
+   load_wiki_talk()
