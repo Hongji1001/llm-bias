@@ -91,7 +91,7 @@ def load_md_gender():
     data_raw = load_dataset("md_gender_bias", "funpedia")['train']
     data_raw = data_raw.to_pandas()
     data_raw = data_raw[data_raw['gender'] != 0]
-    data_raw['gender'] = data_raw['gender'].replace({'1': 0, '2': 1}).astype(int)
+    data_raw['gender'] = data_raw['gender'].replace({1: 0, 2: 1}).astype(int)
     data_raw['label'] = data_raw['gender']
     data_raw = data_raw[['text', 'label', 'gender']]
     data_raw = data_raw.rename(
@@ -261,4 +261,4 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
 
 
 if __name__ == '__main__':
-   load_wiki_talk()
+   load_md_gender()
