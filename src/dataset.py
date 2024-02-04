@@ -72,7 +72,7 @@ def load_acs_i():
     ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
     ca_features['label'] = ca_labels
     ca_features = ca_features[['text', 'label', 'SEX']]
-    data_raw = data_raw.rename(
+    ca_features = ca_features.rename(
         columns={'SEX': 'sensitive'})
     return ca_features
 
