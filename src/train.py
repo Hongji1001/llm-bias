@@ -15,6 +15,7 @@ from metrics import eod, kld, spd
 def train(model, data_loader, optimizer, device):
     model.train()
     total_loss, total_accuracy = 0, 0
+    loss_fn = torch.nn.CrossEntropyLoss()
 
     for batch in tqdm(data_loader, unit='batch'):
         input_ids = batch['input_ids'].to(device)
@@ -22,9 +23,15 @@ def train(model, data_loader, optimizer, device):
         labels = batch['labels'].to(device)
 
         optimizer.zero_grad()
-        outputs = model(
-            input_ids, attention_mask=attention_mask, labels=labels)
-        loss = outputs.loss
+        
+        if hasattr(model, 'gpt2'):
+            outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+            loss = loss_fn(outputs, labels)
+        else:
+            outputs = model(
+                input_ids, attention_mask=attention_mask, labels=labels)
+            loss = outputs.loss
+            
         total_loss += loss.item()
 
         loss.backward()
@@ -149,11 +156,11 @@ if __name__ == '__main__':
     # Add an argument for the dataset, this is also a required argument
     parser.add_argument('--dataset', type=str, required=False,
                         help='The name of the dataset to use')
-    
+
     # Add an argument for the status, this is also a required argument
     parser.add_argument('--status', type=str, required=False,
                         help='The status of llm')
-    
+
     # Add an argument for the name of pre-trained model, this is also a required argument
     parser.add_argument('--name', type=str, required=False,
                         help='The name of pre-trained model')
