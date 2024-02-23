@@ -1,12 +1,15 @@
-import yaml
-import pandas as pd
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+import pandas as pd
 import torch
-from torch.utils.data import Dataset
-from sklearn.model_selection import train_test_split
+import yaml
 from datasets import load_dataset
 from folktables import ACSDataSource, ACSIncome
+from sklearn.model_selection import train_test_split
+from torch.utils.data import Dataset
+
+from network import download_file
 
 script_dir = Path(__file__).resolve().parent
 
@@ -103,8 +106,8 @@ def load_md_gender():
 
 
 def load_wikibias():
-    data_raw = pd.read_csv('/home/hx84/llm-bias/dataset/wikibias/class_binary/train.tsv', delimiter='\t',
-                           header=None, names=['text', 'none', 'label'], index_col=False)
+    file = download_file('https://docs.google.com/uc?export=download&id=1va3-3oBixdY4WEAOL3AvqcsGc5j2o34G', cache_dir='~/.cache/wiki_bias', filename='train.tsv')
+    data_raw = pd.read_csv(file, delimiter='\t', header=None, names=['text', 'none', 'label'], index_col=False)
     with open(script_dir / 'gender.yaml', 'r') as yaml_file:
         binary_categories = yaml.safe_load(yaml_file)
         
@@ -263,4 +266,4 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
 
 
 if __name__ == '__main__':
-   load_acs_i()
+   load_wikibias()
