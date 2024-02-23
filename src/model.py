@@ -1,18 +1,17 @@
 import torch
+from transformers import PreTrainedModel
 from transformers import BertTokenizer, BertForMaskedLM
 from transformers import RobertaTokenizer, RobertaForMaskedLM
 from transformers import AlbertTokenizer, AlbertForMaskedLM
 from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Model, GPT2Config
 from transformers import BartTokenizer, BartForConditionalGeneration
-from transformers import RobertaTokenizer
 from transformers import DistilBertTokenizer
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-
-
-# Add a classification header
-class GPT2ForSequenceClassification(torch.nn.Module):
+    
+    
+class GPT2ForSequenceClassification(PreTrainedModel):
     def __init__(self, model_name, num_labels):
-        super().__init__()
+        super().__init__(GPT2Config.from_pretrained(model_name))
         self.gpt2 = GPT2Model.from_pretrained(model_name)
         self.classifier = torch.nn.Linear(self.gpt2.config.hidden_size, num_labels)
 
@@ -53,7 +52,7 @@ def load_model(name="bert"):
 
 def load_model_Classification(name="bert", num_labels=2):
     if name == 'gpt2':
-        model_config = GPT2Config.from_pretrained("gpt2", num_labels=2)
+        model_config = GPT2Config.from_pretrained("gpt2", num_labels=num_labels)
         model = GPT2ForSequenceClassification("gpt2", model_config.num_labels)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = tokenizer.eos_token

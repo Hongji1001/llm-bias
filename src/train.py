@@ -44,6 +44,7 @@ def evaluate(model, data_loader, device):
     model.eval()
     total_loss, total_accuracy = 0, 0
     predictions, true_labels = [], []
+    loss_fn = torch.nn.CrossEntropyLoss()    
 
     with torch.no_grad():
         for batch in data_loader:
@@ -51,12 +52,17 @@ def evaluate(model, data_loader, device):
             attention_mask = batch['attention_mask'].to(device)
             labels = batch['labels'].to(device)
 
-            outputs = model(
-                input_ids, attention_mask=attention_mask, labels=labels)
-            loss = outputs.loss
+            if hasattr(model, 'gpt2'):
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
+                loss = loss_fn(outputs, labels)
+            else:
+                outputs = model(
+                    input_ids, attention_mask=attention_mask, labels=labels)
+                loss = outputs.loss
             total_loss += loss.item()
 
-            logits = outputs.logits
+            # logits = outputs.logits
+            logits = outputs if not isinstance(outputs, dict) else outputs['logits']
             predictions.extend(torch.argmax(logits, dim=1).tolist())
             true_labels.extend(labels.tolist())
 
@@ -75,7 +81,7 @@ def test(model, data_loader, device, sensitive_list):
             labels = batch['labels'].to(device)
 
             outputs = model(input_ids, attention_mask=attention_mask)
-            logits = outputs.logits
+            logits = outputs if not isinstance(outputs, dict) else outputs['logits']
             
             probabilities = torch.softmax(logits, dim=1)
             output_probs = probabilities.cpu().numpy()
@@ -84,7 +90,6 @@ def test(model, data_loader, device, sensitive_list):
             predictions.extend(torch.argmax(logits, dim=1).tolist())
             true_labels.extend(labels.tolist())
     
-    print(predictions)
     target_hat_list = np.concatenate(target_hat_list, axis=0)
     # print(target_hat_list)
     # print(np.array(true_labels))
@@ -117,9 +122,9 @@ def main(model_name, dataset, status="train", name="bert"):
         model.to(device)
 
         train_dataset = AdultDataset(train_texts, train_labels, tokenizer)
-        train_loader = DataLoader(train_dataset, batch_size=4, shuffle=True)
+        train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
-        val_loader = DataLoader(val_dataset, batch_size=4)
+        val_loader = DataLoader(val_dataset, batch_size=32)
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
 
@@ -131,8 +136,14 @@ def main(model_name, dataset, status="train", name="bert"):
             print(f'Epoch {epoch + 1}/{epochs}')
             print(
                 f'Train Loss: {train_loss}, Val Loss: {val_loss}, Val Accuracy: {val_accuracy}')
+            
+            val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
+            val_loader = DataLoader(val_dataset, batch_size=32)
+            report = test(model, val_loader, device, val_sensitive.to_numpy())
+            print("model:", model_name, "dataset:", dataset)
+            print(report)
 
-        path = '/home/hx84/llm-bias/checkpoint/' + model_name + '_' + dataset
+        path = '/home/hongjixu/llm-bias/' + model_name + '_' + dataset
         model.save_pretrained(path)
     else:
         model, tokenizer = load_model_sequence_pretrain(
