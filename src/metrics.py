@@ -1,5 +1,17 @@
+import os
+import zipfile
+
+import evaluate
+import nltk
 import numpy as np
-from scipy.stats import entropy
+from gensim.models import KeyedVectors
+from gensim.scripts.glove2word2vec import glove2word2vec
+from nltk.tokenize import word_tokenize
+from scipy.spatial import distance
+from scipy.stats import entropy, wasserstein_distance
+
+from network import download_file
+
 
 def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> float:
     '''
@@ -89,3 +101,95 @@ def spd(y_pred, sensitive_list):
     spd = abs(group_1_positive_rate - group_2_positive_rate)
 
     return spd
+
+
+def toxicity(completions, groups):
+    assert len(completions) == len(groups)
+    toxicity_evaluator = evaluate.load("toxicity")
+    toxicity_results = {}
+
+    for i, group in enumerate(groups):
+        
+        group_completions = completions[i]
+        result = toxicity_evaluator.compute(predictions=group_completions, aggregation="ratio")
+        toxicity_results[group] = result
+
+    return toxicity_results
+
+
+def honest(completions, groups):
+    assert len(completions) == len(groups)
+    toxicity_evaluator = evaluate.load("honest", "en")
+    honest_result = honest.compute(predictions=completions, groups=groups)
+
+    return honest_result
+
+
+def regard(completions, groups):
+    assert len(completions) == len(groups)
+    regard = evaluate.load("regard", module_type="measurement")
+    regard_results = {}
+
+    for i, group in enumerate(groups):
+        
+        group_completions = completions[i]
+        result = regard.compute(data=group_completions, aggregation="average")
+        regard_results[group] = result
+
+    return regard_results
+
+
+def co_occurrence(top_tokens_batch, word_list_1, word_list_2):
+    results = []
+
+    for top_tokens in top_tokens_batch:
+        prob_1, prob_2 = 0, 0
+
+        for word, score in top_tokens:
+            if word in word_list_1:
+                prob_1 += score
+            elif word in word_list_2:
+                prob_2 += score
+
+        results.append({'catogory1': prob_1, 'catogory2': prob_2})
+
+    return results
+
+
+def gender_polarity(completions, groups):
+    nltk.download('punkt') 
+    file = download_file('https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip')
+    # uzip glove.*.zip
+    glove_path = os.path.join(os.path.dirname(file), 'glove.6B')
+
+    if os.path.exists(glove_path):
+        print(f"Glove file already uzips: {glove_path}")
+    else:
+        print(f"Uzipping {file}")
+        with zipfile.ZipFile(file, 'r') as zip_ref:
+            zip_ref.extractall(glove_path)
+
+    # load Glove model
+    print("Loading Glove model")
+    glove_file = os.path.join(glove_path, 'glove.6B.100d.txt')
+    glove_model = KeyedVectors.load_word2vec_format(glove_file, binary=False, no_header=True)
+
+    # calculate gender polarity
+    gender_polarity_vector = glove_model['he'] - glove_model['she']
+    gender_polarity_result = {}
+
+    for i, group in enumerate(groups):
+        group_completions = completions[i]
+        b_list = []
+        for completion in group_completions:
+            tokens = word_tokenize(completion)
+            for token in tokens:
+                b = 1 - distance.cosine(gender_polarity_vector, glove_model[token])
+                b_list.append(b)
+        numerator = np.sum(np.sign(b) * b**2)
+        denominator = np.sum(np.abs(b))
+
+        expression_value = numerator / denominator
+        gender_polarity_result[group] = expression_value
+        
+    return gender_polarity_result
