@@ -7,13 +7,15 @@ from transformers import GPT2Tokenizer, GPT2LMHeadModel, GPT2Model, GPT2Config
 from transformers import BartTokenizer, BartForConditionalGeneration
 from transformers import DistilBertTokenizer
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
-    
-    
+
+
 class GPT2ForSequenceClassification(PreTrainedModel):
+
     def __init__(self, model_name, num_labels):
         super().__init__(GPT2Config.from_pretrained(model_name))
         self.gpt2 = GPT2Model.from_pretrained(model_name)
-        self.classifier = torch.nn.Linear(self.gpt2.config.hidden_size, num_labels)
+        self.classifier = torch.nn.Linear(self.gpt2.config.hidden_size,
+                                          num_labels)
 
     def forward(self, input_ids, attention_mask):
         outputs = self.gpt2(input_ids=input_ids, attention_mask=attention_mask)
@@ -29,6 +31,7 @@ model_dict = {
     "albert": 'albert-base-v2',
     "distlibert": 'distilbert-base-uncased'
 }
+
 
 def load_model(name="bert"):
     if name == "bert":
@@ -52,13 +55,15 @@ def load_model(name="bert"):
 
 def load_model_Classification(name="bert", num_labels=2):
     if name == 'gpt2':
-        model_config = GPT2Config.from_pretrained("gpt2", num_labels=num_labels)
+        model_config = GPT2Config.from_pretrained("gpt2",
+                                                  num_labels=num_labels)
         model = GPT2ForSequenceClassification("gpt2", model_config.num_labels)
         tokenizer = GPT2Tokenizer.from_pretrained("gpt2")
         tokenizer.pad_token = tokenizer.eos_token
-        print('#'*100, tokenizer.pad_token)
+        print('#' * 100, tokenizer.pad_token)
     else:
-        model = AutoModelForSequenceClassification.from_pretrained(model_dict[name], num_labels=num_labels)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            model_dict[name], num_labels=num_labels)
         tokenizer = AutoTokenizer.from_pretrained(model_dict[name])
     return model, tokenizer
 
@@ -70,6 +75,7 @@ def load_model_sequence_pretrain(path, name="bert"):
         model.load_state_dict(torch.load(path))
         tokenizer = GPT2Tokenizer.from_pretrained(path)
     else:
-        model = AutoModelForSequenceClassification.from_pretrained(path, local_files_only=True)
+        model = AutoModelForSequenceClassification.from_pretrained(
+            path, local_files_only=True)
         tokenizer = AutoTokenizer.from_pretrained(model_dict[name])
     return model, tokenizer

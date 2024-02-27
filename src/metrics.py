@@ -13,7 +13,10 @@ from scipy.stats import entropy, wasserstein_distance
 from network import download_file
 
 
-def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> float:
+def eod(y_pred: np.ndarray,
+        y_gt: np.ndarray,
+        sensitive_attribute: np.ndarray,
+        threshold: float = 0.5) -> float:
     '''
     对于多元预测的数据集而言, 需要针对每一元进行一个equal_opportunity划分, 比如对于某一种职业, 二元分类目标就是是这种职业/不是这种职业
     所以要求的输入是一个多维的预测概率数组，每一维代表了一个多元类别的预测概率, 如果是二元分类, 那么就只需要传入预测为1的那一维的概率
@@ -23,8 +26,9 @@ def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, t
     predicted_classes = np.argmax(y_pred, axis=1)
 
     # Create a result matrix where only the predicted class is True for each sample
-    result_matrix = np.equal(np.arange(y_pred.shape[1]), predicted_classes[:, None])
-    
+    result_matrix = np.equal(np.arange(y_pred.shape[1]),
+                             predicted_classes[:, None])
+
     _, num_cols = result_matrix.shape
     for col_index in range(num_cols):
         category = result_matrix[:, col_index]
@@ -36,8 +40,8 @@ def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, t
         category = category[y_gt == col_index]
         sensitive_positive = sensitive_attribute[y_gt == col_index]
 
-        y_z_1 = category[sensitive_positive == 1] 
-        y_z_0 = category[sensitive_positive == 0] 
+        y_z_1 = category[sensitive_positive == 1]
+        y_z_0 = category[sensitive_positive == 0]
 
         # print("y_z_1:", y_z_1)
         # print("y_z_0:", y_z_0)
@@ -50,17 +54,20 @@ def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, t
         equality *= 100
         print(f"eod of category {col_index} is: ", equality)
 
+
 def kld(y_pred, sensitive_attribute) -> float:
     '''
     分类种类是多元的, 敏感类别是2元的
     '''
+
     def calculate_distribution(pred):
         my_array = np.argmax(pred, axis=1)
-        unique_elements, element_counts = np.unique(my_array, return_counts=True)
+        unique_elements, element_counts = np.unique(my_array,
+                                                    return_counts=True)
 
         n = max(unique_elements)
         element_proportions = np.zeros(n + 1)
-        
+
         # 计算每个类别的概率分布，对于Wikibia就是按照职业划分类别，其他二元的就按照二元分类目标进行划分。
         element_proportions[unique_elements] = element_counts / len(my_array)
         return element_proportions
@@ -74,6 +81,7 @@ def kld(y_pred, sensitive_attribute) -> float:
 
     kld_value = entropy(p1_distribution, p2_distribution)
     return kld_value
+
 
 def spd(y_pred, sensitive_list):
     '''
@@ -109,9 +117,10 @@ def toxicity(completions, groups):
     toxicity_results = {}
 
     for i, group in enumerate(groups):
-        
+
         group_completions = completions[i]
-        result = toxicity_evaluator.compute(predictions=group_completions, aggregation="ratio")
+        result = toxicity_evaluator.compute(predictions=group_completions,
+                                            aggregation="ratio")
         toxicity_results[group] = result
 
     return toxicity_results
@@ -131,7 +140,7 @@ def regard(completions, groups):
     regard_results = {}
 
     for i, group in enumerate(groups):
-        
+
         group_completions = completions[i]
         result = regard.compute(data=group_completions, aggregation="average")
         regard_results[group] = result
@@ -157,8 +166,9 @@ def co_occurrence(top_tokens_batch, word_list_1, word_list_2):
 
 
 def gender_polarity(completions, groups):
-    nltk.download('punkt') 
-    file = download_file('https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip')
+    nltk.download('punkt')
+    file = download_file(
+        'https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip')
     # uzip glove.*.zip
     glove_path = os.path.join(os.path.dirname(file), 'glove.6B')
 
@@ -172,7 +182,9 @@ def gender_polarity(completions, groups):
     # load Glove model
     print("Loading Glove model")
     glove_file = os.path.join(glove_path, 'glove.6B.100d.txt')
-    glove_model = KeyedVectors.load_word2vec_format(glove_file, binary=False, no_header=True)
+    glove_model = KeyedVectors.load_word2vec_format(glove_file,
+                                                    binary=False,
+                                                    no_header=True)
 
     # calculate gender polarity
     gender_polarity_vector = glove_model['he'] - glove_model['she']
@@ -184,12 +196,13 @@ def gender_polarity(completions, groups):
         for completion in group_completions:
             tokens = word_tokenize(completion)
             for token in tokens:
-                b = 1 - distance.cosine(gender_polarity_vector, glove_model[token])
+                b = 1 - distance.cosine(gender_polarity_vector,
+                                        glove_model[token])
                 b_list.append(b)
         numerator = np.sum(np.sign(b) * b**2)
         denominator = np.sum(np.abs(b))
 
         expression_value = numerator / denominator
         gender_polarity_result[group] = expression_value
-        
+
     return gender_polarity_result
