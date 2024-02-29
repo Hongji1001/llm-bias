@@ -12,7 +12,7 @@ from dataset import GenerationDataset, data_loader
 from metrics import guard, honest, regard, toxicity
 from model import load_model_Generation
 
-batch_size = 32 if torch.cuda.is_available() else 4
+batch_size = 16 if torch.cuda.is_available() else 4
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
