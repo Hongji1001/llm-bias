@@ -97,7 +97,7 @@ def load_model_sequence_pretrain(path, name="bert"):
 
 def llama_guard():
     from huggingface_hub import login
-    path = os.path.join(os.path.expanduser('~'), '.cache')
+    path = os.path.join(os.path.expanduser('~'), '.cache/huggingface/token')
     try:
         with open(path, "r") as file:
             token = file.read().strip()
