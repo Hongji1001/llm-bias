@@ -256,7 +256,7 @@ def load_bold() -> pd.DataFrame:
         'domain': 'sensitive'
     })
     print(data_raw)
-    return data_raw
+    return data_raw.head(3000)
 
 
 def load_crows_pair(metric_type):
