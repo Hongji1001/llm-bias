@@ -1,16 +1,22 @@
 import os
 import zipfile
+from ast import List
+from typing import Any, Dict, List, Sequence
 
 import evaluate
 import nltk
 import numpy as np
+import torch
 from gensim.models import KeyedVectors
 from gensim.scripts.glove2word2vec import glove2word2vec
 from nltk.tokenize import word_tokenize
 from scipy.spatial import distance
 from scipy.stats import entropy, wasserstein_distance
 
+from model import llama_guard
 from network import download_file
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def eod(y_pred: np.ndarray,
@@ -111,14 +117,31 @@ def spd(y_pred, sensitive_list):
     return spd
 
 
-def toxicity(completions, groups):
-    assert len(completions) == len(groups)
+def toxicity(completions: Sequence[str],
+             sensitives: Sequence[str]) -> Dict[str, Dict]:
+    """
+    The toxicity measurement aims to quantify the toxicity of the input texts 
+    using a pretrained hate speech classification model.
+
+    Here is an example to use toxicity.
+    >>> completions = ["this is completion a", "this is completion b", "this is completion c"]
+    >>> sensitives = ["group 0", "group 1", "group 1"]
+
+    >>> toxicity(completions, sensitives)
+    >>> {'group 0': {'toxicity_ratio': 0.0}, 'group 1': {'toxicity_ratio': 0.0}}
+    """
+    assert len(completions) == len(sensitives)
+
     toxicity_evaluator = evaluate.load("toxicity")
     toxicity_results = {}
+    groups_completions = {}
 
-    for i, group in enumerate(groups):
+    for i, group in enumerate(sensitives):
+        if group not in groups_completions:
+            groups_completions[group] = []
+        groups_completions[group].append(completions[i])
 
-        group_completions = completions[i]
+    for group, group_completions in groups_completions.items():
         result = toxicity_evaluator.compute(predictions=group_completions,
                                             aggregation="ratio")
         toxicity_results[group] = result
@@ -126,26 +149,86 @@ def toxicity(completions, groups):
     return toxicity_results
 
 
-def honest(completions, groups):
-    assert len(completions) == len(groups)
-    toxicity_evaluator = evaluate.load("honest", "en")
-    honest_result = honest.compute(predictions=completions, groups=groups)
+def honest(completions: Sequence[str],
+           sensitives: Sequence[str]) -> Dict[str, Dict]:
+    """
+    The regard measurement returns the estimated language polarity towards and 
+    social perceptions of a demographic (e.g. gender, race, sexual orientation).
+    
+    Here is an example to use honest.
+    >>> completions = ["this is completion a", "this is completion b", "this is completion c"]
+    >>> sensitives = ["group 0", "group 1", "group 1"]
+
+    >>> honest(completions, sensitives)
+    >>> {'honest_score_per_group': {'group 0': 0.0, 'group 1': 0.0}}
+    """
+    assert len(completions) == len(sensitives)
+    honest = evaluate.load("honest", "en")
+    groups_completions = {}
+
+    for i, group in enumerate(sensitives):
+        if group not in groups_completions:
+            groups_completions[group] = []
+        groups_completions[group].append(completions[i])
+
+    groups = list(groups_completions.keys())
+    group_completions = list(groups_completions.values())
+
+    honest_result = honest.compute(predictions=group_completions,
+                                   groups=groups)
 
     return honest_result
 
 
-def regard(completions, groups):
-    assert len(completions) == len(groups)
+def regard(completions: Sequence[str], sensitives: Sequence[str]):
+    """
+    The regard measurement returns the estimated language polarity towards and 
+    social perceptions of a demographic (e.g. gender, race, sexual orientation).
+    """
+    assert len(completions) == len(sensitives)
     regard = evaluate.load("regard", module_type="measurement")
     regard_results = {}
+    groups_completions = {}
 
-    for i, group in enumerate(groups):
+    for i, group in enumerate(sensitives):
+        if group not in groups_completions:
+            groups_completions[group] = []
+        groups_completions[group].append(completions[i])
 
-        group_completions = completions[i]
+    for group, group_completions in groups_completions.items():
         result = regard.compute(data=group_completions, aggregation="average")
         regard_results[group] = result
 
     return regard_results
+
+
+def guard(completions: Sequence[str], sensitives: Sequence[str]):
+    guard_results = {}
+    groups_completions = {}
+
+    for i, group in enumerate(sensitives):
+        if group not in groups_completions:
+            groups_completions[group] = []
+        groups_completions[group].append(completions[i])
+    model, tokenizer = llama_guard()
+
+    def moderate(chat: str):
+        input_ids = tokenizer.apply_chat_template(
+            chat, return_tensors="pt").to(device)
+        output = model.generate(input_ids=input_ids,
+                                max_new_tokens=100,
+                                pad_token_id=0)
+        prompt_len = input_ids.shape[-1]
+        return tokenizer.decode(output[0][prompt_len:],
+                                skip_special_tokens=True)
+
+    for group, group_completions in groups_completions.items():
+        result = []
+        for completion in group_completions:
+            result.append(moderate(completion))
+        guard_results[group] = (sum(1 for s in result if s == "safe") /
+                                len(result)) * 100
+    return guard_results
 
 
 def co_occurrence(top_tokens_batch, word_list_1, word_list_2):
@@ -206,3 +289,11 @@ def gender_polarity(completions, groups):
         gender_polarity_result[group] = expression_value
 
     return gender_polarity_result
+
+
+if __name__ == '__main__':
+    print(
+        honest([
+            "this is completion a", "this is completion b",
+            "this is completion c"
+        ], ["group 0", "group 1", "group 1"]))

@@ -1,11 +1,15 @@
 from pathlib import Path
 
+import nltk
+
+nltk.download('punkt')
 import numpy as np
 import pandas as pd
 import torch
 import yaml
 from datasets import load_dataset
 from folktables import ACSDataSource, ACSIncome
+from nltk.tokenize import word_tokenize
 from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 
@@ -14,7 +18,7 @@ from network import download_file
 script_dir = Path(__file__).resolve().parent
 
 
-class AdultDataset(Dataset):
+class ClassificationDataset(Dataset):
 
     def __init__(self, texts, labels, tokenizer, max_len=256):
         self.texts = texts
@@ -44,6 +48,52 @@ class AdultDataset(Dataset):
             'input_ids': encoding['input_ids'].flatten(),
             'attention_mask': encoding['attention_mask'].flatten(),
             'labels': torch.tensor(label, dtype=torch.long)
+        }
+
+
+class GenerationDataset(Dataset):
+
+    def __init__(self, prompts, texts, tokenizer, max_len=256):
+        self.prompts = prompts
+        self.texts = texts
+        self.tokenizer = tokenizer
+        self.max_len = max_len
+
+    def __len__(self):
+        return len(self.prompts)
+
+    def __getitem__(self, idx):
+        prompt = str(self.prompts[idx])
+        text = str(self.texts[idx])
+
+        # Encode the prompts
+        prompt_encoding = self.tokenizer.encode_plus(
+            prompt,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        # Encode the wikipedia texts
+        text_encoding = self.tokenizer.encode_plus(
+            text,
+            add_special_tokens=True,
+            max_length=self.max_len,
+            return_token_type_ids=False,
+            padding='max_length',
+            truncation=True,
+            return_attention_mask=True,
+            return_tensors='pt',
+        )
+
+        return {
+            'input_ids': prompt_encoding['input_ids'].flatten(),
+            'attention_mask': prompt_encoding['attention_mask'].flatten(),
+            'labels': text_encoding['input_ids'].flatten(),
         }
 
 
@@ -190,6 +240,25 @@ def load_wiki_talk():
     return data_raw
 
 
+def load_bold() -> pd.DataFrame:
+    data_raw = load_dataset("AlexaAI/bold")['train']
+    data_raw = data_raw.to_pandas()
+    data_raw = data_raw[['prompts', 'wikipedia', 'domain']]
+    def tokenize_and_recombine(text):
+        text = str(text)
+        text = text.replace("[", '').replace("]", '').replace("'", '')
+        tokens = word_tokenize(text)
+        return ' '.join(tokens)
+    data_raw['prompts'] = data_raw['prompts'].apply(tokenize_and_recombine)
+    data_raw['wikipedia'] = data_raw['wikipedia'].apply(tokenize_and_recombine)
+    data_raw = data_raw.rename(columns={
+        'wikipedia': 'texts',
+        'domain': 'sensitive'
+    })
+    print(data_raw)
+    return data_raw
+
+
 def load_crows_pair(metric_type):
     data_raw = load_dataset("crows_pairs")['test']
     if metric_type == "CPS":
@@ -297,9 +366,11 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
         return load_wikibias()
     elif dataset == "wiki_talk":
         return load_wiki_talk()
+    elif dataset == "bold":
+        return load_bold()
     else:
         print(f"{dataset} is not supported now")
 
 
 if __name__ == '__main__':
-    load_wikibias()
+    load_bold()

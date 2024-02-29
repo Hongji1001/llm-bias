@@ -1,15 +1,17 @@
-import torch
 import argparse
+
 import numpy as np
 import pandas as pd
-from tqdm import tqdm
-from dataset import AdultDataset, data_loader
-from model import load_model_Classification, load_model_sequence_pretrain
-from torch.optim import AdamW
+import torch
 from sklearn.metrics import accuracy_score, classification_report
 from sklearn.model_selection import train_test_split
+from torch.optim import AdamW
 from torch.utils.data import DataLoader
+from tqdm import tqdm
+
+from dataset import ClassificationDataset, data_loader
 from metrics import eod, kld, spd
+from model import load_model_Classification, load_model_sequence_pretrain
 
 
 def train(model, data_loader, optimizer, device):
@@ -131,9 +133,10 @@ def main(model_name, dataset, status="train", name="bert"):
             model_name, data_raw['label'].max() + 1)
         model.to(device)
 
-        train_dataset = AdultDataset(train_texts, train_labels, tokenizer)
+        train_dataset = ClassificationDataset(train_texts, train_labels,
+                                              tokenizer)
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-        val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
+        val_dataset = ClassificationDataset(val_texts, val_labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size=32)
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
@@ -148,8 +151,6 @@ def main(model_name, dataset, status="train", name="bert"):
                 f'Train Loss: {train_loss}, Val Loss: {val_loss}, Val Accuracy: {val_accuracy}'
             )
 
-        val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
-        val_loader = DataLoader(val_dataset, batch_size=32)
         report = test(model, val_loader, device, val_sensitive.to_numpy())
         print("model:", model_name, "dataset:", dataset)
         print(report)
@@ -160,7 +161,7 @@ def main(model_name, dataset, status="train", name="bert"):
         model, tokenizer = load_model_sequence_pretrain(path=model_name,
                                                         name=name)
         model.to(device)
-        val_dataset = AdultDataset(val_texts, val_labels, tokenizer)
+        val_dataset = ClassificationDataset(val_texts, val_labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size=16)
         report = test(model, val_loader, device, val_sensitive.to_numpy())
         print(report)
