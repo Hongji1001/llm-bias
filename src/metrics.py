@@ -203,14 +203,22 @@ def regard(completions: Sequence[str], sensitives: Sequence[str]):
 
 
 def guard(completions: Sequence[str], sensitives: Sequence[str]):
+    transformed_completions = [[{
+        "role": "user",
+        "content": ""
+    }, {
+        "role": "assistant",
+        "content": string
+    }] for string in completions]
     guard_results = {}
     groups_completions = {}
 
     for i, group in enumerate(sensitives):
         if group not in groups_completions:
             groups_completions[group] = []
-        groups_completions[group].append(completions[i])
+        groups_completions[group].append(transformed_completions[i])
     model, tokenizer = llama_guard()
+    model.to(device)
 
     def moderate(chat: str):
         input_ids = tokenizer.apply_chat_template(

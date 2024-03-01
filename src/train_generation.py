@@ -1,5 +1,7 @@
 import argparse
+import json
 import os
+import time
 
 import pandas as pd
 import torch
@@ -17,74 +19,6 @@ batch_size = 16 if torch.cuda.is_available() else 4
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
-def train(model, data_loader, optimizer, device):
-    model.train()
-    total_loss, total_accuracy = 0, 0
-    loss_fn = torch.nn.CrossEntropyLoss()
-
-    for batch in tqdm(data_loader, desc='Training', unit='batch'):
-        input_ids = batch['input_ids'].to(device)
-        attention_mask = batch['attention_mask'].to(device)
-        labels = batch['labels'].to(device)
-
-        optimizer.zero_grad()
-
-        outputs = model(input_ids,
-                        attention_mask=attention_mask,
-                        labels=labels)
-        loss = outputs.loss
-
-        total_loss += loss.item()
-
-        loss.backward()
-        optimizer.step()
-
-    return total_loss / len(data_loader)
-
-
-def evaluate(model, tokenizer, data_loader, sensitives, device):
-    model.eval()
-    completions, completions_split, references = [], [], []
-
-    with torch.no_grad():
-        for batch in tqdm(data_loader, desc='Evaluating', unit='batch'):
-            input_ids = batch['input_ids'].to(device)
-            labels = batch['labels'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
-
-            outputs = model.generate(input_ids=input_ids,
-                                     attention_mask=attention_mask,
-                                     max_length=512,
-                                     num_beams=5,
-                                     no_repeat_ngram_size=2,
-                                     early_stopping=True)
-
-            for output in outputs:
-                completion = tokenizer.decode(output, skip_special_tokens=True)
-                completions.append(completion)
-                completions_split.append(completion.split())
-
-            for label in labels:
-                reference = tokenizer.decode(label, skip_special_tokens=True)
-                references.append([reference.split()])
-
-    scores = {}
-    scores["bleu"] = corpus_bleu(references, completions_split)
-    scores["toxicity"] = toxicity(completions, sensitives)
-    scores["regard"] = regard(completions, sensitives)
-    scores["honest"] = honest(completions, sensitives)
-    scores["guard"] = guard(completions, sensitives)
-
-    print("=" * 100)
-    print("Evaluation Scores:")
-    print("=" * 100)
-    for metric, score in scores.items():
-        print(f"{metric.capitalize()} Score: {score}")
-    print("=" * 100)
-
-    return
-
-
 def prepare_dataset(dataset, status):
     # Load raw data from the dataset
     data_raw = data_loader(dataset)
@@ -92,6 +26,7 @@ def prepare_dataset(dataset, status):
     assert isinstance(
         data_raw,
         pd.DataFrame), "The variable is not a Pandas DataFrame data type"
+    data_raw = data_raw if torch.cuda.is_available() else data_raw.head(100)
 
     # Split the data
     train_data, val_data = train_test_split(data_raw,
@@ -143,12 +78,114 @@ def construct_model_path(model_name, dataset):
     return final_path
 
 
+def train(model, data_loader, optimizer, device):
+    model.train()
+    total_loss, total_accuracy = 0, 0
+    loss_fn = torch.nn.CrossEntropyLoss()
+
+    for batch in tqdm(data_loader, desc='Training', unit='batch'):
+        input_ids = batch['input_ids'].to(device)
+        attention_mask = batch['attention_mask'].to(device)
+        labels = batch['labels'].to(device)
+
+        optimizer.zero_grad()
+
+        outputs = model(input_ids,
+                        attention_mask=attention_mask,
+                        labels=labels)
+        loss = outputs.loss
+
+        total_loss += loss.item()
+
+        loss.backward()
+        optimizer.step()
+
+    return total_loss / len(data_loader)
+
+
+def test(model, tokenizer, data_loader, sensitives, device):
+    model.eval()
+    completions, completions_split, references = [], [], []
+
+    with torch.no_grad():
+        for batch in tqdm(data_loader, desc='Evaluating', unit='batch'):
+            input_ids = batch['input_ids'].to(device)
+            labels = batch['labels'].to(device)
+            attention_mask = batch['attention_mask'].to(device)
+
+            outputs = model.generate(input_ids=input_ids,
+                                     attention_mask=attention_mask,
+                                     max_length=512,
+                                     num_beams=5,
+                                     no_repeat_ngram_size=2,
+                                     early_stopping=True)
+
+            for output in outputs:
+                completion = tokenizer.decode(output, skip_special_tokens=True)
+                completions.append(completion)
+                completions_split.append(completion.split())
+
+            for label in labels:
+                reference = tokenizer.decode(label, skip_special_tokens=True)
+                references.append([reference.split()])
+
+    data_to_save = {
+        "completions": completions,
+        "completions_split": completions_split,
+        "sensitives": sensitives.to_list(),
+        "references": references
+    }
+
+    output_file_path = os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                                    'outputs')
+    if not os.path.exists(output_file_path):
+        os.makedirs(output_file_path)
+    final_path = os.path.join(
+        output_file_path,
+        f"{model.config.model_type}_{data_loader.dataset.dataset}.json")
+
+    with open(final_path, 'w', encoding='utf-8') as f:
+        json.dump(data_to_save, f, ensure_ascii=False, indent=4)
+    print(f"output file save to {final_path}")
+
+    return
+
+
+def evaluate(path):
+    start_time = time.time()
+    with open(path, 'r', encoding='utf-8') as f:
+        loaded_data = json.load(f)
+
+    completions = loaded_data["completions"]
+    completions_split = loaded_data["completions_split"]
+    sensitives = loaded_data["sensitives"]
+    references = loaded_data["references"]
+
+    scores = {}
+    scores["bleu"] = corpus_bleu(references, completions_split)
+    scores["toxicity"] = toxicity(completions, sensitives)
+    scores["regard"] = regard(completions, sensitives)
+    scores["honest"] = honest(completions, sensitives)
+    scores["guard"] = guard(completions, sensitives)
+
+    end_time = time.time()
+    print("=" * 100)
+    print("Evaluation Scores:")
+    print("=" * 100)
+    for metric, score in scores.items():
+        print(f"{metric.capitalize()} Score: {score}")
+    print("=" * 100)
+
+    execution_time = end_time - start_time
+    print(f"Function execution time: {execution_time} seconds")
+
+
 def main(model_name, dataset, status, model_path=None):
     texts, labels, sensitives = prepare_dataset(dataset, status)
     if status == "train":
         model, tokenizer = load_model_Generation(status, model_name=model_name)
         model.to(device)
-        train_dataset = GenerationDataset(texts, labels, tokenizer)
+        train_dataset = GenerationDataset(texts, labels, tokenizer, dataset)
         train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
@@ -162,56 +199,23 @@ def main(model_name, dataset, status, model_path=None):
         path = construct_model_path(model_name, dataset)
         model.save_pretrained(path)
 
-    else:
+    elif status == "test":
         if model_path is None:
             # Automatically construct the model path for testing if not provided
             model_path = construct_model_path(model_name, dataset)
             print(f"Constructed model path for testing: {model_path}")
         model, tokenizer = load_model_Generation(status, model_path=model_path)
         model.to(device)
-        val_dataset = GenerationDataset(texts, labels, tokenizer)
+        val_dataset = GenerationDataset(texts, labels, tokenizer, dataset)
         val_loader = DataLoader(val_dataset, batch_size)
-        evaluate(model, tokenizer, val_loader, sensitives, device)
+        test(model, tokenizer, val_loader, sensitives, device)
 
+    else:
+        evaluate(
+            os.path.join(
+                os.path.join(os.path.dirname(os.path.dirname(__file__)),
+                             'outputs'), f"{model_name}_{dataset}.json"))
 
-# def main(model_name, dataset, status, name="bert"):
-#     data_raw = data_loader(dataset)
-#     assert isinstance(data_raw, pd.DataFrame), "变量不是 Pandas DataFrame 数据类型"
-#     data_raw = data_raw if torch.cuda.is_available() else data_raw.head(12)
-
-#     train_texts, val_texts, train_labels, val_labels, _, val_sensitive = train_test_split(
-#         data_raw['prompts'],
-#         data_raw['texts'],
-#         data_raw['sensitive'],
-#         test_size=0.2,
-#         stratify=data_raw['sensitive'])
-#     train_texts = train_texts.reset_index(drop=True)
-#     train_labels = train_labels.reset_index(drop=True)
-#     val_texts = val_texts.reset_index(drop=True)
-#     val_labels = val_labels.reset_index(drop=True)
-#     val_sensitive = val_sensitive.reset_index(drop=True)
-
-#     if status == "train":
-#         model, tokenizer = load_model_Generation(model_name)
-#         model.to(device)
-
-#         train_dataset = GenerationDataset(train_texts, train_labels, tokenizer)
-#         train_loader = DataLoader(train_dataset, batch_size, shuffle=True)
-#         val_dataset = GenerationDataset(val_texts, val_labels, tokenizer)
-#         val_loader = DataLoader(val_dataset, batch_size)
-
-#         optimizer = AdamW(model.parameters(), lr=2e-5)
-
-#         epochs = 1
-#         for epoch in range(epochs):
-#             train_loss = train(model, train_loader, optimizer, device)
-#             print(f'Epoch {epoch + 1}/{epochs}')
-#             print(f"Train Loss: {train_loss}")
-
-#         path = '/home/hongjixu/llm-bias/' + model_name + '_' + dataset
-#         model.save_pretrained(path)
-#     elif status == "test":
-#         pass
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(
@@ -244,4 +248,4 @@ if __name__ == '__main__':
     # Parse the arguments
     args = parser.parse_args()
 
-    main(args.model, args.dataset, args.status, args.path)
+    main("gpt2", "bold", "eval", args.path)

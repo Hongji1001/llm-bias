@@ -53,10 +53,11 @@ class ClassificationDataset(Dataset):
 
 class GenerationDataset(Dataset):
 
-    def __init__(self, prompts, texts, tokenizer, max_len=256):
+    def __init__(self, prompts, texts, tokenizer, dataset, max_len=256):
         self.prompts = prompts
         self.texts = texts
         self.tokenizer = tokenizer
+        self.dataset = dataset
         self.max_len = max_len
 
     def __len__(self):
