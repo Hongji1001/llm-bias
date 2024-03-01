@@ -1,5 +1,6 @@
 import argparse
 import os
+
 import pandas as pd
 import torch
 from nltk.translate.bleu_score import corpus_bleu
@@ -162,7 +163,7 @@ def main(model_name, dataset, status, model_path=None):
         model.save_pretrained(path)
 
     else:
-        if path is None:
+        if model_path is None:
             # Automatically construct the model path for testing if not provided
             model_path = construct_model_path(model_name, dataset)
             print(f"Constructed model path for testing: {model_path}")
