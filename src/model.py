@@ -25,6 +25,7 @@ class GPT2ForSequenceClassification(PreTrainedModel):
         return logits
 
 
+# Dictionary mapping model names to their pre-trained identifiers
 model_dict = {
     "bert": 'bert-base-uncased',
     "roberta": 'roberta-base',
@@ -73,12 +74,40 @@ def load_model_Classification(name="bert", num_labels=2):
     return model, tokenizer
 
 
-def load_model_Generation(name="bert"):
+def load_model_Generation(phase="train",
+                          model_name=None,
+                          model_path=None):
+    """
+    Loads a model and tokenizer based on the training or testing phase.
 
-    model = AutoModelForCausalLM.from_pretrained(model_dict_gen[name])
-    tokenizer = AutoTokenizer.from_pretrained(model_dict_gen[name])
+    Args:
+    - model_name (str): The name of the model to load.
+    - phase (str): The phase of the operation, either 'train' or 'test'.
+    - fine_tuned_model_path (str): The path to the fine-tuned model. Required if phase is 'test'.
+
+    Returns:
+    - model: The loaded model, either pre-trained or fine-tuned.
+    - tokenizer: The tokenizer associated with the model.
+    """
+
+    if phase == "train":
+        # Load the pre-trained model and tokenizer for training
+        assert model_name is not None, "model_name must be specified for testing phase."
+        model = AutoModelForCausalLM.from_pretrained(model_dict_gen[model_name])
+        tokenizer = AutoTokenizer.from_pretrained(model_dict_gen[model_name])
+    elif phase == "test":
+        assert model_path is not None, "model_path must be specified for testing phase."
+        # Load the fine-tuned model and tokenizer for testing
+        model = AutoModelForCausalLM.from_pretrained(model_path, local_files_only=True)
+        tokenizer = AutoTokenizer.from_pretrained(model_path)
+    else:
+        raise ValueError(
+            "Invalid phase specified. Choose either 'train' or 'test'.")
+
+    # Set the padding token to be the EOS token and adjust padding side
     tokenizer.pad_token = tokenizer.eos_token
     tokenizer.padding_side = 'left'
+
     return model, tokenizer
 
 
@@ -108,5 +137,5 @@ def llama_guard():
     dtype = torch.bfloat16
     tokenizer = AutoTokenizer.from_pretrained(model_id)
     model = AutoModelForCausalLM.from_pretrained(model_id, torch_dtype=dtype)
-    
+
     return model, tokenizer
