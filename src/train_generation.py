@@ -168,6 +168,7 @@ def main(model_name, dataset, status, model_path=None):
             model_path = construct_model_path(model_name, dataset)
             print(f"Constructed model path for testing: {model_path}")
         model, tokenizer = load_model_Generation(status, model_path=model_path)
+        model.to(device)
         val_dataset = GenerationDataset(texts, labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size)
         evaluate(model, tokenizer, val_loader, sensitives, device)
