@@ -99,7 +99,7 @@ def load_model_Generation(phase="train",
         assert model_path is not None, "model_path must be specified for testing phase."
         # Load the fine-tuned model and tokenizer for testing
         model = AutoModelForCausalLM.from_pretrained(model_path, local_files_only=True)
-        tokenizer = AutoTokenizer.from_pretrained(model_path)
+        tokenizer = AutoTokenizer.from_pretrained(model.config.model_type)
     else:
         raise ValueError(
             "Invalid phase specified. Choose either 'train' or 'test'.")
