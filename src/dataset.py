@@ -245,11 +245,13 @@ def load_bold() -> pd.DataFrame:
     data_raw = load_dataset("AlexaAI/bold")['train']
     data_raw = data_raw.to_pandas()
     data_raw = data_raw[['prompts', 'wikipedia', 'domain']]
+
     def tokenize_and_recombine(text):
         text = str(text)
         text = text.replace("[", '').replace("]", '').replace("'", '')
         tokens = word_tokenize(text)
         return ' '.join(tokens)
+
     data_raw['prompts'] = data_raw['prompts'].apply(tokenize_and_recombine)
     data_raw['wikipedia'] = data_raw['wikipedia'].apply(tokenize_and_recombine)
     data_raw = data_raw.rename(columns={
@@ -258,6 +260,12 @@ def load_bold() -> pd.DataFrame:
     })
     print(data_raw)
     return data_raw.head(3000)
+
+
+def load_local(file_path: Path):
+    data_raw = pd.read_json(file_path)
+    print(data_raw)
+    return data_raw
 
 
 def load_crows_pair(metric_type):
@@ -369,6 +377,8 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
         return load_wiki_talk()
     elif dataset == "bold":
         return load_bold()
+    elif dataset.endswith('.json'):
+        return load_local(dataset)
     else:
         print(f"{dataset} is not supported now")
 

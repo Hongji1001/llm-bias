@@ -90,6 +90,13 @@ def main():
     print(results_df)
     print(results_df.groupby('domain').size())
 
+    # Save results directly
+    results_df.to_json(file_path=script_dir / "imdb.json",
+                       orient='records',
+                       lines=True,
+                       force_ascii=False,
+                       indent=4)
+
     # Save results to JSON files by domain
     for domain, group_df in results_df.groupby('domain'):
         file_path = f"{domain}_result.json"
