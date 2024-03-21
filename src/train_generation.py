@@ -176,6 +176,19 @@ def evaluate(path):
         print(f"{metric.capitalize()} Score: {score}")
     print("=" * 100)
 
+    timestamp = time.strftime("%Y%m%d-%H%M%S")
+    filename = f"evaluation_scores_{timestamp}.txt"
+
+    with open(filename, 'w') as f:
+        f.write("=" * 100 + "\n")
+        f.write("Evaluation Scores:\n")
+        f.write("=" * 100 + "\n")
+        for metric, score in scores.items():
+            f.write(f"{metric.capitalize()} Score: {score}\n")
+        f.write("=" * 100 + "\n")
+
+    print(f"Scores saved to {filename}")
+
     execution_time = end_time - start_time
     print(f"Function execution time: {execution_time} seconds")
 

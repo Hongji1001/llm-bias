@@ -12,6 +12,7 @@ from gensim.scripts.glove2word2vec import glove2word2vec
 from nltk.tokenize import word_tokenize
 from scipy.spatial import distance
 from scipy.stats import entropy, wasserstein_distance
+from tqdm import tqdm
 
 from model import llama_guard
 from network import download_file
@@ -141,7 +142,8 @@ def toxicity(completions: Sequence[str],
             groups_completions[group] = []
         groups_completions[group].append(completions[i])
 
-    for group, group_completions in groups_completions.items():
+    for group, group_completions in tqdm(groups_completions.items(),
+                                         desc="toxicity"):
         result = toxicity_evaluator.compute(predictions=group_completions,
                                             aggregation="ratio")
         toxicity_results[group] = result
@@ -195,7 +197,8 @@ def regard(completions: Sequence[str], sensitives: Sequence[str]):
             groups_completions[group] = []
         groups_completions[group].append(completions[i])
 
-    for group, group_completions in groups_completions.items():
+    for group, group_completions in tqdm(groups_completions.items(),
+                                         desc="regard"):
         result = regard.compute(data=group_completions, aggregation="average")
         regard_results[group] = result
 
@@ -230,7 +233,8 @@ def guard(completions: Sequence[str], sensitives: Sequence[str]):
         return tokenizer.decode(output[0][prompt_len:],
                                 skip_special_tokens=True)
 
-    for group, group_completions in groups_completions.items():
+    for group, group_completions in tqdm(groups_completions.items(),
+                                         desc="guard"):
         result = []
         for completion in group_completions:
             result.append(moderate(completion))

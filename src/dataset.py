@@ -1,4 +1,5 @@
 from pathlib import Path
+from click import prompt
 
 import nltk
 
@@ -262,8 +263,31 @@ def load_bold() -> pd.DataFrame:
     return data_raw.head(3000)
 
 
+def load_realtoxic():
+    data_raw = load_dataset("allenai/real-toxicity-prompts")['train']
+    data_raw = data_raw.to_pandas()
+    data_raw = data_raw[data_raw['challenging'] == True]
+    data_raw = data_raw[['prompt', 'continuation', 'challenging']]
+    data_raw['prompt'] = data_raw['prompt'].apply(lambda x: x['text'])
+    data_raw['continuation'] = data_raw['continuation'].apply(lambda x: x['text'])
+    data_raw['continuation'] = data_raw['prompt'] + data_raw['continuation']
+    data_raw = data_raw.rename(columns={
+        'continuation': 'texts',
+        'prompt': 'prompts',
+        'challenging': 'sensitive'
+    })
+    print(data_raw)
+    return data_raw
+
+
 def load_local(file_path: Path):
-    data_raw = pd.read_json(file_path)
+    data_raw = pd.read_json(file_path,
+                            orient='records')
+    data_raw = data_raw.rename(columns={
+        'text': 'texts',
+        'prompt': 'prompts',
+        'domain': 'sensitive'
+    })
     print(data_raw)
     return data_raw
 
@@ -377,6 +401,8 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
         return load_wiki_talk()
     elif dataset == "bold":
         return load_bold()
+    elif dataset == "realtoxic":
+        return load_realtoxic()
     elif dataset.endswith('.json'):
         return load_local(dataset)
     else:
@@ -384,4 +410,4 @@ def data_loader(dataset="crows_pairs", metric="CPS"):
 
 
 if __name__ == '__main__':
-    load_bold()
+    load_realtoxic()

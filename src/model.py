@@ -74,7 +74,7 @@ def load_model_Classification(name="bert", num_labels=2):
     return model, tokenizer
 
 
-def load_model_Generation(phase="train",
+def load_model_Generation(type="raw",
                           model_name=None,
                           model_path=None):
     """
@@ -82,7 +82,7 @@ def load_model_Generation(phase="train",
 
     Args:
     - model_name (str): The name of the model to load.
-    - phase (str): The phase of the operation, either 'train' or 'test'.
+    - type (str): The type of the model, either 'raw' or 'finetune'.
     - fine_tuned_model_path (str): The path to the fine-tuned model. Required if phase is 'test'.
 
     Returns:
@@ -90,12 +90,12 @@ def load_model_Generation(phase="train",
     - tokenizer: The tokenizer associated with the model.
     """
 
-    if phase == "train":
+    if type == "raw":
         # Load the pre-trained model and tokenizer for training
         assert model_name is not None, "model_name must be specified for testing phase."
         model = AutoModelForCausalLM.from_pretrained(model_dict_gen[model_name])
         tokenizer = AutoTokenizer.from_pretrained(model_dict_gen[model_name])
-    elif phase == "test":
+    elif type == "finetune":
         assert model_path is not None, "model_path must be specified for testing phase."
         # Load the fine-tuned model and tokenizer for testing
         model = AutoModelForCausalLM.from_pretrained(model_path, local_files_only=True)
