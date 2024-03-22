@@ -1,4 +1,4 @@
-import os
+from pathlib import Path
 
 import requests
 from tqdm import tqdm
@@ -9,12 +9,10 @@ def download_file(url, cache_dir='~/.cache', filename=None):
         filename = url.split('/')[-1]
 
     # download in ~/.cache
-    cache_dir = os.path.expanduser(cache_dir)
-    if not os.path.exists(cache_dir):
-        os.makedirs(cache_dir)
-    file_path = os.path.join(cache_dir, filename)
-
-    if os.path.exists(file_path):
+    cache_dir = Path(cache_dir).expanduser()
+    cache_dir.mkdir(parents=True, exist_ok=True)
+    file_path = cache_dir / filename
+    if file_path.exists():
         print(f"File already exists: {file_path}")
         return file_path
 
@@ -32,6 +30,16 @@ def download_file(url, cache_dir='~/.cache', filename=None):
 
     print(f"Download completed: {file_path}")
     return file_path
+
+def login_huggingface():
+    from huggingface_hub import login
+    path = Path.home() / '.cache' / 'huggingface' / 'token'
+    try:
+        with open(path, "r") as file:
+            token = file.read().strip()
+    except FileNotFoundError:
+        print(f"Token file not found at {path}.")
+    login(token)
 
 
 if __name__ == '__main__':

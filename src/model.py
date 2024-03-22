@@ -1,10 +1,12 @@
-import os
+from pathlib import Path
 
 import torch
 from transformers import (AutoModelForCausalLM,
                           AutoModelForSequenceClassification, AutoTokenizer,
                           GPT2Config, GPT2Model, GPT2Tokenizer,
                           PreTrainedModel)
+
+from util import login_huggingface
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -36,7 +38,7 @@ model_dict = {
 model_dict_gen = {
     "bert": 'bert-base-uncased',
     "gpt2": 'gpt2',
-    "llama": 'Llama-2-7b-chat-hf'
+    "llama2": 'meta-llama/Llama-2-7b-chat-hf'
 }
 
 # def load_model(name="bert"):
@@ -125,14 +127,7 @@ def load_model_sequence_pretrain(path, name="bert"):
 
 
 def llama_guard():
-    from huggingface_hub import login
-    path = os.path.join(os.path.expanduser('~'), '.cache/huggingface/token')
-    try:
-        with open(path, "r") as file:
-            token = file.read().strip()
-    except FileNotFoundError:
-        print(f"Token file not found at {path}.")
-    login(token)
+    login_huggingface()
     model_id = "meta-llama/LlamaGuard-7b"
     dtype = torch.bfloat16
     tokenizer = AutoTokenizer.from_pretrained(model_id)

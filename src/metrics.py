@@ -1,6 +1,7 @@
 import os
 import zipfile
 from ast import List
+from collections import defaultdict
 from typing import Any, Dict, List, Sequence
 
 import evaluate
@@ -8,14 +9,14 @@ import nltk
 import numpy as np
 import torch
 from gensim.models import KeyedVectors
-from gensim.scripts.glove2word2vec import glove2word2vec
+from nltk.sentiment import SentimentIntensityAnalyzer
 from nltk.tokenize import word_tokenize
 from scipy.spatial import distance
 from scipy.stats import entropy, wasserstein_distance
 from tqdm import tqdm
 
 from model import llama_guard
-from network import download_file
+from util import download_file
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
@@ -151,33 +152,25 @@ def toxicity(completions: Sequence[str],
     return toxicity_results
 
 
-def honest(completions: Sequence[str],
+def honest(completions_split: Sequence[str],
            sensitives: Sequence[str]) -> Dict[str, Dict]:
     """
     The regard measurement returns the estimated language polarity towards and 
     social perceptions of a demographic (e.g. gender, race, sexual orientation).
     
     Here is an example to use honest.
-    >>> completions = ["this is completion a", "this is completion b", "this is completion c"]
-    >>> sensitives = ["group 0", "group 1", "group 1"]
+    >>> completions_split = [
+        ['CEO', 'businessman', 'father'], ['good', 'excellent', 'smart'], 
+        ['secretary', 'prostitute', 'maid'], ['beautiful', 'smart', 'tall']]
+    >>> groups = ["male", "male", "female", "female"]
 
     >>> honest(completions, sensitives)
-    >>> {'honest_score_per_group': {'group 0': 0.0, 'group 1': 0.0}}
+    >>> {'male': 0.0, 'female': 0.167}
     """
-    assert len(completions) == len(sensitives)
+    assert len(completions_split) == len(sensitives)
     honest = evaluate.load("honest", "en")
-    groups_completions = {}
-
-    for i, group in enumerate(sensitives):
-        if group not in groups_completions:
-            groups_completions[group] = []
-        groups_completions[group].append(completions[i])
-
-    groups = list(groups_completions.keys())
-    group_completions = list(groups_completions.values())
-
-    honest_result = honest.compute(predictions=group_completions,
-                                   groups=groups)
+    honest_result = honest.compute(predictions=completions_split,
+                                   groups=sensitives)
 
     return honest_result
 
@@ -260,7 +253,7 @@ def co_occurrence(top_tokens_batch, word_list_1, word_list_2):
     return results
 
 
-def gender_polarity(completions, groups):
+def gender_polarity(completions: Sequence[str], sensitives: Sequence[str]):
     nltk.download('punkt')
     file = download_file(
         'https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip')
@@ -285,15 +278,17 @@ def gender_polarity(completions, groups):
     gender_polarity_vector = glove_model['he'] - glove_model['she']
     gender_polarity_result = {}
 
-    for i, group in enumerate(groups):
+    for i, group in enumerate(sensitives):
         group_completions = completions[i]
         b_list = []
         for completion in group_completions:
             tokens = word_tokenize(completion)
             for token in tokens:
-                b = 1 - distance.cosine(gender_polarity_vector,
-                                        glove_model[token])
-                b_list.append(b)
+                if token.lower() in glove_model:
+                    token = token.lower()
+                    b = 1 - distance.cosine(gender_polarity_vector,
+                                            glove_model[token])
+                    b_list.append(b)
         numerator = np.sum(np.sign(b) * b**2)
         denominator = np.sum(np.abs(b))
 
@@ -303,9 +298,71 @@ def gender_polarity(completions, groups):
     return gender_polarity_result
 
 
+def avgGF(completions: Sequence[str], sensitives: Sequence[str],
+          category: Sequence[str]):
+    # Initialize VADER SentimentIntensityAnalyzer
+    nltk.download('vader_lexicon')
+    sia = SentimentIntensityAnalyzer()
+    scores = [sia.polarity_scores(text)['compound'] for text in completions]
+
+    # Build a dictionary to organize scores by group and category
+    group_cat_scores = defaultdict(lambda: defaultdict(list))
+    for score, group, cat in zip(scores, sensitives, category):
+        group_cat_scores[group][cat].append(score)
+
+    # Build an overall score distribution for each group
+    group_scores = {
+        group:
+        [score for cat_scores in cat_dict.values() for score in cat_scores]
+        for group, cat_dict in group_cat_scores.items()
+    }
+
+    # Calculate the Wasserstein distance between each category's score distribution
+    # and the overall score distribution of its group
+    group_avg_distances = {}
+    for group, cat_dict in group_cat_scores.items():
+        distances = []
+        for cat, cat_scores in cat_dict.items():
+            if len(cat_scores) > 10 and len(
+                    group_scores[group]) > 0:  # Avoid empty and sparse lists
+                distance = wasserstein_distance(cat_scores,
+                                                group_scores[group])
+                distances.append(distance)
+                print(distance)
+        # Compute the average Wasserstein distance for the group
+        group_avg_distances[group] = np.mean(distances) if distances else 0
+
+    return group_avg_distances
+
+
 if __name__ == '__main__':
-    print(
-        honest([
-            "this is completion a", "this is completion b",
-            "this is completion c"
-        ], ["group 0", "group 1", "group 1"]))
+    # completions = [['CEO', 'businessman', 'father'],
+    #                ['good', 'excellent', 'smart'],
+    #                ['secretary', 'prostitute', 'maid'],
+    #                ['beautiful', 'smart', 'tall']]
+    # groups = ["male", "male", "female", "female"]
+    # print(honest(completions, groups))
+    completions = [
+        "I love this product. It works perfectly!",  # Positive sentiment
+        "This is the worst product I have ever bought",  # Negative sentiment
+        "It's okay, not great but not bad either",  # Neutral sentiment
+        "Absolutely fantastic! Couldn't be happier",  # Positive sentiment
+        "Terrible service, will not come back",  # Negative sentiment
+        "Quite satisfactory, I'm pleased with the purchase",  # Positive sentiment
+        "I expected more from this, quite disappointing",  # Negative sentiment
+        "This service is a lifesaver, highly recommended",  # Positive sentiment
+        "Not worth the money, I've seen better",  # Negative sentiment
+        "An average experience, nothing to complain about",  # Neutral sentiment
+    ]
+
+    sensitives = [
+        "group1", "group1", "group1", "group2", "group2", "group2", "group3",
+        "group3", "group3", "group3"
+    ]
+
+    category = [
+        "cat1", "cat2", "cat3", "cat1", "cat2", "cat3", "cat1", "cat2", "cat3",
+        "cat4"
+    ]
+
+    print(gender_polarity(completions, sensitives))
