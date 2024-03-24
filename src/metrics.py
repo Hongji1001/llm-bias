@@ -119,8 +119,41 @@ def spd(y_pred, sensitive_list):
     return spd
 
 
-def toxicity(completions: Sequence[str],
-             sensitives: Sequence[str]) -> Dict[str, Dict]:
+# def toxicity(completions: Sequence[str],
+#              sensitives: Sequence[str]) -> Dict[str, Dict]:
+#     """
+#     The toxicity measurement aims to quantify the toxicity of the input texts
+#     using a pretrained hate speech classification model.
+
+#     Here is an example to use toxicity.
+#     >>> completions = ["this is completion a", "this is completion b", "this is completion c"]
+#     >>> sensitives = ["group 0", "group 1", "group 1"]
+
+#     >>> toxicity(completions, sensitives)
+#     >>> {'group 0': {'toxicity_ratio': 0.0}, 'group 1': {'toxicity_ratio': 0.0}}
+#     """
+#     assert len(completions) == len(sensitives)
+
+#     toxicity_evaluator = evaluate.load("toxicity")
+#     toxicity_results = {}
+#     groups_completions = {}
+
+#     for i, group in enumerate(sensitives):
+#         if group not in groups_completions:
+#             groups_completions[group] = []
+#         groups_completions[group].append(completions[i])
+
+#     for group, group_completions in tqdm(groups_completions.items(),
+#                                          desc="toxicity"):
+#         result = toxicity_evaluator.compute(predictions=group_completions,
+#                                             aggregation="ratio")
+#         toxicity_results[group] = result
+
+#     return toxicity_results
+
+
+def toxicity(completions: Sequence[str], sensitives: Sequence[str],
+             categories: Sequence[str]) -> Dict[str, Dict]:
     """
     The toxicity measurement aims to quantify the toxicity of the input texts 
     using a pretrained hate speech classification model.
@@ -128,32 +161,48 @@ def toxicity(completions: Sequence[str],
     Here is an example to use toxicity.
     >>> completions = ["this is completion a", "this is completion b", "this is completion c"]
     >>> sensitives = ["group 0", "group 1", "group 1"]
+    >>> categories = ["cat 0", "cat 1", "cat 1"]
 
-    >>> toxicity(completions, sensitives)
-    >>> {'group 0': {'toxicity_ratio': 0.0}, 'group 1': {'toxicity_ratio': 0.0}}
+    >>> toxicity(completions, sensitives, categories)
+    >>> 
     """
-    assert len(completions) == len(sensitives)
+    assert len(completions) == len(sensitives) == len(
+        categories), "All input sequences must have the same length."
 
     toxicity_evaluator = evaluate.load("toxicity")
-    toxicity_results = {}
-    groups_completions = {}
 
-    for i, group in enumerate(sensitives):
-        if group not in groups_completions:
-            groups_completions[group] = []
-        groups_completions[group].append(completions[i])
+    group_category_completions = defaultdict(lambda: defaultdict(list))
+    for completion, group, category in zip(completions, sensitives,
+                                           categories):
+        group_category_completions[group][category].append(completion)
 
-    for group, group_completions in tqdm(groups_completions.items(),
-                                         desc="toxicity"):
-        result = toxicity_evaluator.compute(predictions=group_completions,
-                                            aggregation="ratio")
-        toxicity_results[group] = result
+    results = defaultdict(dict)
 
-    return toxicity_results
+    # Organize completions by group and category.
+    for group, categories_completions in tqdm(
+            group_category_completions.items(),
+            desc="Evaluating group toxicity"):
+        all_group_completions = []
+
+        # Evaluate metric for each group and its categories.
+        for category, cat_completions in categories_completions.items():
+            cat_result = toxicity_evaluator.compute(
+                predictions=cat_completions, aggregation="ratio")
+            results[group][category] = cat_result[
+                'toxicity_ratio']  # Add the category score to the group's dictionary.
+            all_group_completions.extend(
+                cat_completions)  # Collect texts for the group's total score.
+
+        # Evaluate the group's total toxicity score.
+        total_result = toxicity_evaluator.compute(
+            predictions=all_group_completions, aggregation="ratio")
+        results[group]['total'] = total_result['toxicity_ratio']
+
+    return dict(results)
 
 
-def honest(completions_split: Sequence[str],
-           sensitives: Sequence[str]) -> Dict[str, Dict]:
+def honest(completions_split: Sequence[str], sensitives: Sequence[str],
+           categories: Sequence[str]) -> Dict[str, Dict]:
     """
     The regard measurement returns the estimated language polarity towards and 
     social perceptions of a demographic (e.g. gender, race, sexual orientation).
@@ -167,33 +216,88 @@ def honest(completions_split: Sequence[str],
     >>> honest(completions, sensitives)
     >>> {'male': 0.0, 'female': 0.167}
     """
-    assert len(completions_split) == len(sensitives)
+    assert len(completions_split) == len(sensitives) == len(
+        categories), "All input sequences must have the same length."
+
     honest = evaluate.load("honest", "en")
-    honest_result = honest.compute(predictions=completions_split,
-                                   groups=sensitives)
 
-    return honest_result
+    group_to_cat_to_text = defaultdict(lambda: defaultdict(list))
+    for text, group, cat in zip(completions_split, sensitives, categories):
+        group_to_cat_to_text[group][cat].append(text)
+
+    result = defaultdict(dict)
+
+    # Organize completions by group and category.
+    for group, cat_to_text in group_to_cat_to_text.items():
+        group_texts = []
+
+        # Evaluate metric for each group and its categories.
+        for cat, texts in cat_to_text.items():
+
+            cat_result = honest.compute(predictions=texts)
+            result[group][cat] = cat_result[
+                'honest_score']  # Add the category score to the group's dictionary.
+            group_texts.extend(
+                texts)  # Collect texts for the group's total score.
+
+        total_result = honest.compute(predictions=group_texts)
+        result[group]['total'] = total_result['honest_score']
+
+    return dict(result)
 
 
-def regard(completions: Sequence[str], sensitives: Sequence[str]):
+def compute_negative_ratio(regard_results):
+    """
+    Helper function to compute the ratio of entries where 'negative' label has the highest score.
+    :param regard_results: The results returned by the regard evaluator.
+    :return: The ratio of entries with the highest 'negative' score.
+    """
+    negative_highest_count = 0
+    total_count = 0
+
+    # Iterate through the list of regard evaluation results
+    for regard_list in regard_results['regard']:
+        # For each result entry, find if 'negative' has the highest score
+        highest_score_label = max(regard_list,
+                                  key=lambda x: x['score'])['label']
+        if highest_score_label == 'negative':
+            negative_highest_count += 1
+        total_count += 1
+
+    return negative_highest_count / total_count if total_count > 0 else 0
+
+
+def regard(completions: Sequence[str], sensitives: Sequence[str],
+           categories: Sequence[str]):
     """
     The regard measurement returns the estimated language polarity towards and 
-    social perceptions of a demographic (e.g. gender, race, sexual orientation).
+    social perceptions of a demographic (e.g., gender, race, sexual orientation),
+    specifically focusing on the negative regard proportion.
     """
-    assert len(completions) == len(sensitives)
-    regard = evaluate.load("regard", module_type="measurement")
+    assert len(completions) == len(sensitives) == len(categories)
+    regard_evaluator = evaluate.load("regard", module_type="measurement")
+
+    # Organize completions by group and category
+    group_cat_completions = defaultdict(lambda: defaultdict(list))
+    for completion, group, cat in zip(completions, sensitives, categories):
+        group_cat_completions[group][cat].append(completion)
+
     regard_results = {}
-    groups_completions = {}
+    # Evaluate regard for each group and category
+    for group, cat_completions in tqdm(group_cat_completions.items(),
+                                       desc="Evaluating regard"):
+        cat_results = {}
+        all_group_completions = [
+        ]  # Collect all completions for overall group evaluation
+        for cat, completions in cat_completions.items():
+            result = regard_evaluator.compute(data=completions)
+            cat_results[cat] = compute_negative_ratio(result)
+            all_group_completions.extend(completions)
 
-    for i, group in enumerate(sensitives):
-        if group not in groups_completions:
-            groups_completions[group] = []
-        groups_completions[group].append(completions[i])
-
-    for group, group_completions in tqdm(groups_completions.items(),
-                                         desc="regard"):
-        result = regard.compute(data=group_completions, aggregation="average")
-        regard_results[group] = result
+        # Evaluate overall group negative regard
+        group_result = regard_evaluator.compute(data=all_group_completions)
+        cat_results['total'] = compute_negative_ratio(group_result)
+        regard_results[group] = cat_results
 
     return regard_results
 
@@ -355,14 +459,32 @@ if __name__ == '__main__':
         "An average experience, nothing to complain about",  # Neutral sentiment
     ]
 
+    completions_split = [
+        ['I', 'love', 'this', 'product.', 'It', 'works', 'perfectly!'],
+        [
+            'This', 'is', 'the', 'worst', 'product', 'I', 'have', 'ever',
+            'bought'
+        ], ["It's", 'okay,', 'not', 'great', 'but', 'not', 'bad', 'either'],
+        ['Absolutely', 'fantastic!', "Couldn't", 'be', 'happier'],
+        ['Terrible', 'service,', 'will', 'not', 'come', 'back'],
+        [
+            'Quite', 'satisfactory,', "I'm", 'pleased', 'with', 'the',
+            'purchase'
+        ],
+        ['I', 'expected', 'more', 'from', 'this,', 'quite', 'disappointing'],
+        ['This', 'service', 'is', 'a', 'lifesaver,', 'highly', 'recommended'],
+        ['Not', 'worth', 'the', 'money,', "I've", 'seen', 'better'],
+        ['An', 'average', 'experience,', 'nothing', 'to', 'complain', 'about']
+    ]
+
     sensitives = [
         "group1", "group1", "group1", "group2", "group2", "group2", "group3",
         "group3", "group3", "group3"
     ]
 
     category = [
-        "cat1", "cat2", "cat3", "cat1", "cat2", "cat3", "cat1", "cat2", "cat3",
+        "cat1", "cat2", "cat2", "cat1", "cat2", "cat3", "cat1", "cat2", "cat3",
         "cat4"
     ]
 
-    print(gender_polarity(completions, sensitives))
+    print(regard(completions, sensitives, category))

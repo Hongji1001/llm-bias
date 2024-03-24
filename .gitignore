@@ -161,3 +161,7 @@ cython_debug/
 
 # Vscode
 .vscode/
+
+# Output and checkpoint of src code
+/outputs
+/checkpoint
