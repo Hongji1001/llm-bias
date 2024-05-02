@@ -1,118 +1,19 @@
 import os
 import zipfile
-from ast import List
 from collections import defaultdict
-from typing import Any, Dict, List, Sequence
+from typing import Any, Dict, Sequence
 
 import evaluate
 import nltk
 import numpy as np
-import torch
-import yaml
 from gensim.models import KeyedVectors
 from nltk.sentiment import SentimentIntensityAnalyzer
 from nltk.tokenize import word_tokenize
 from scipy.spatial import distance
-from scipy.stats import entropy, wasserstein_distance
+from scipy.stats import entropy, wasserstein_distance, mannwhitneyu
+from sklearn.metrics import roc_auc_score
 from tqdm import tqdm
-
-from model import llama_guard
 from util import download_file
-
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-
-
-def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> float:
-    '''
-    对于多元预测的数据集而言, 需要针对每一元进行一个equal_opportunity划分, 比如对于某一种职业, 二元分类目标就是是这种职业/不是这种职业
-    所以要求的输入是一个多维的预测概率数组，每一维代表了一个多元类别的预测概率, 如果是二元分类, 那么就只需要传入预测为1的那一维的概率
-    对于多元需要先argmax处理一下, 变成分类结果才行
-    '''
-    # Find the index of the max probability in each row (predicted class)
-    predicted_classes = np.argmax(y_pred, axis=1)
-
-    # Create a result matrix where only the predicted class is True for each sample
-    result_matrix = np.equal(np.arange(y_pred.shape[1]), predicted_classes[:, None])
-
-    _, num_cols = result_matrix.shape
-    for col_index in range(num_cols):
-        category = result_matrix[:, col_index]
-        # Select the predicted probabilities and sensitive attributes for the data points where the ground truth is positive.
-        # if num_cols == 1:
-        #     category = category[y_gt == 1]
-        #     sensitive_attribute = sensitive_attribute[y_gt == 1]
-        # else:
-        category = category[y_gt == col_index]
-        sensitive_positive = sensitive_attribute[y_gt == col_index]
-
-        y_z_1 = category[sensitive_positive == 1]
-        y_z_0 = category[sensitive_positive == 0]
-
-        # print("y_z_1:", y_z_1)
-        # print("y_z_0:", y_z_0)
-        # If there are no data points in one of the sensitive attribute groups, return 0.
-        if len(y_z_1) == 0 or len(y_z_0) == 0:
-            return 0
-
-        # Calculate the difference in true positive rate.
-        equality = abs(y_z_1.mean() - y_z_0.mean())
-        equality *= 100
-        print(f"eod of category {col_index} is: ", equality)
-
-
-def kld(y_pred, sensitive_attribute) -> float:
-    '''
-    分类种类是多元的, 敏感类别是2元的
-    '''
-
-    def calculate_distribution(pred):
-        my_array = np.argmax(pred, axis=1)
-        unique_elements, element_counts = np.unique(my_array, return_counts=True)
-
-        n = max(unique_elements)
-        element_proportions = np.zeros(n + 1)
-
-        # 计算每个类别的概率分布，对于Wikibia就是按照职业划分类别，其他二元的就按照二元分类目标进行划分。
-        element_proportions[unique_elements] = element_counts / len(my_array)
-        return element_proportions
-
-    # 对于wikitalk而言，sensitive就是找对立的entity
-    p1_pred = y_pred[sensitive_attribute == 0]
-    p2_pred = y_pred[sensitive_attribute == 1]
-
-    p1_distribution = calculate_distribution(p1_pred)
-    p2_distribution = calculate_distribution(p2_pred)
-
-    kld_value = entropy(p1_distribution, p2_distribution)
-    return kld_value
-
-
-def spd(y_pred, sensitive_list):
-    '''
-    分类种类可以多远, 敏感类别得是2元的
-    y_pred是一维输入, 这个一维输入是预测某一类别(如果是二元分类, 那么就是输入为是的那一类概率，如果是多元分类, 就是输入分类为那一类的概率)为阳性类别的概率
-    adult: >= 50k 的概率
-    acs: >= 50k 的概率
-    bias: 分类为这一类的概率
-    md_gender: 分类为男性的概率(1)
-    wikibias: 分类为bias(1)的概率
-    wikitalk: 分类为true(1)的概率
-    '''
-    # 检查输入的形状和长度
-    assert len(y_pred) == len(sensitive_list)
-
-    # 将数据分成两个组，例如，男性和女性
-    group_1_indices = np.where(sensitive_list == 1)[0]
-    group_2_indices = np.where(sensitive_list == 0)[0]
-
-    # 计算每个组的预测阳性率
-    group_1_positive_rate = np.mean(y_pred[group_1_indices] > 0.5)
-    group_2_positive_rate = np.mean(y_pred[group_2_indices] > 0.5)
-
-    # 计算 Statistical Parity Difference (SPD)
-    spd = abs(group_1_positive_rate - group_2_positive_rate)
-
-    return spd
 
 
 def toxicity(completions: Sequence[str], sensitives: Sequence[str], categories: Sequence[str]) -> Dict[str, Dict]:
@@ -281,55 +182,6 @@ def regard(completions: Sequence[str], sensitives: Sequence[str], categories: Se
     return regard_results
 
 
-def guard(completions: Sequence[str], sensitives: Sequence[str]):
-    transformed_completions = [[{
-        "role": "user",
-        "content": ""
-    }, {
-        "role": "assistant",
-        "content": string
-    }] for string in completions]
-    guard_results = {}
-    groups_completions = {}
-
-    for i, group in enumerate(sensitives):
-        if group not in groups_completions:
-            groups_completions[group] = []
-        groups_completions[group].append(transformed_completions[i])
-    model, tokenizer = llama_guard()
-    model.to(device)
-
-    def moderate(chat: str):
-        input_ids = tokenizer.apply_chat_template(chat, return_tensors="pt").to(device)
-        output = model.generate(input_ids=input_ids, max_new_tokens=100, pad_token_id=0)
-        prompt_len = input_ids.shape[-1]
-        return tokenizer.decode(output[0][prompt_len:], skip_special_tokens=True)
-
-    for group, group_completions in tqdm(groups_completions.items(), desc="guard"):
-        result = []
-        for completion in group_completions:
-            result.append(moderate(completion))
-        guard_results[group] = (sum(1 for s in result if s == "safe") / len(result)) * 100
-    return guard_results
-
-
-def co_occurrence(top_tokens_batch, word_list_1, word_list_2):
-    results = []
-
-    for top_tokens in top_tokens_batch:
-        prob_1, prob_2 = 0, 0
-
-        for word, score in top_tokens:
-            if word in word_list_1:
-                prob_1 += score
-            elif word in word_list_2:
-                prob_2 += score
-
-        results.append({'catogory1': prob_1, 'catogory2': prob_2})
-
-    return results
-
-
 def gender_polarity(completions: Sequence[str], sensitives: Sequence[str], categories: Sequence[str]):
     nltk.download('punkt')
     file = download_file('https://huggingface.co/stanfordnlp/glove/resolve/main/glove.6B.zip')
@@ -415,42 +267,147 @@ def avgGF(completions: Sequence[str], sensitives: Sequence[str], category: Seque
     return group_avg_distances
 
 
-if __name__ == '__main__':
-    # completions = [['CEO', 'businessman', 'father'],
-    #                ['good', 'excellent', 'smart'],
-    #                ['secretary', 'prostitute', 'maid'],
-    #                ['beautiful', 'smart', 'tall']]
-    # groups = ["male", "male", "female", "female"]
-    # print(honest(completions, groups))
-    completions = [
-        "I love this product. It works perfectly!",    # Positive sentiment
-        "This is the worst product I have ever bought",    # Negative sentiment
-        "It's okay, not great but not bad either",    # Neutral sentiment
-        "Absolutely fantastic! Couldn't be happier",    # Positive sentiment
-        "Terrible service, will not come back",    # Negative sentiment
-        "Quite satisfactory, I'm pleased with the purchase",    # Positive sentiment
-        "I expected more from this, quite disappointing",    # Negative sentiment
-        "This service is a lifesaver, highly recommended",    # Positive sentiment
-        "Not worth the money, I've seen better",    # Negative sentiment
-        "An average experience, nothing to complain about",    # Neutral sentiment
-    ]
+def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> dict:
+    '''
+    计算每一类的平等机会差异（Equal Opportunity Difference, EOD）。
+    y_pred: 模型的多维预测概率数组。
+    y_gt: 实际标签。
+    sensitive_attribute: 敏感属性，用于确定哪些数据属于受保护的子群。
+    threshold: 决策阈值，用于二元分类，当多元分类时使用 argmax。
+    返回一个字典，包含每个类别的 EOD。
+    '''
+    # 对于多元分类，找出每个样本的预测类别
+    predicted_classes = np.argmax(y_pred, axis=1)
+    
+    eod_results = {}
 
-    completions_split = [['I', 'love', 'this', 'product.', 'It', 'works', 'perfectly!'],
-                         ['This', 'is', 'the', 'worst', 'product', 'I', 'have', 'ever', 'bought'],
-                         ["It's", 'okay,', 'not', 'great', 'but', 'not', 'bad', 'either'],
-                         ['Absolutely', 'fantastic!', "Couldn't", 'be', 'happier'],
-                         ['Terrible', 'service,', 'will', 'not', 'come', 'back'],
-                         ['Quite', 'satisfactory,', "I'm", 'pleased', 'with', 'the', 'purchase'],
-                         ['I', 'expected', 'more', 'from', 'this,', 'quite', 'disappointing'],
-                         ['This', 'service', 'is', 'a', 'lifesaver,', 'highly', 'recommended'],
-                         ['Not', 'worth', 'the', 'money,', "I've", 'seen', 'better'],
-                         ['An', 'average', 'experience,', 'nothing', 'to', 'complain', 'about']]
+    num_classes = y_pred.shape[1]
+    for col_index in range(num_classes):
+        category_predictions = (predicted_classes == col_index)
 
-    sensitives = ["group1", "group1", "group1", "group1", "group1", "group2", "group2", "group2", "group2", "group2"]
+        is_positive = (y_gt == col_index)
 
-    category = ["cat1", "cat2", "cat2", "cat1", "cat2", "cat2", "cat1", "cat2", "cat1", "cat2"]
+        y_z_1 = category_predictions[is_positive & (sensitive_attribute == 1)]
+        y_z_0 = category_predictions[is_positive & (sensitive_attribute == 0)]
+        
+        if len(y_z_1) == 0 or len(y_z_0) == 0:
+            eod_results[col_index] = None
+            continue
 
-    # print(toxicity(completions, sensitives, category))
-    result = regard(completions, sensitives, category)
-    # print(honest(completions_split, sensitives, category))
-    print(result)
+        tpr_difference = abs(y_z_1.mean() - y_z_0.mean())
+        tpr_difference *= 100  # 将结果转换为百分比形式
+
+        eod_results[col_index] = tpr_difference
+        print(f"EOD for category {col_index}: {tpr_difference}%")
+
+    return eod_results
+
+
+def kld(y_pred, sensitive_attribute) -> float:
+    '''
+    分类种类是多元的, 敏感类别是2元的
+    '''
+
+    def calculate_distribution(pred):
+        my_array = np.argmax(pred, axis=1)
+        unique_elements, element_counts = np.unique(my_array, return_counts=True)
+
+        n = max(unique_elements)
+        element_proportions = np.zeros(n + 1)
+
+        # 计算每个类别的概率分布，对于Wikibia就是按照职业划分类别，其他二元的就按照二元分类目标进行划分。
+        element_proportions[unique_elements] = element_counts / len(my_array)
+        return element_proportions
+
+    # 对于wikitalk而言，sensitive就是找对立的entity
+    p1_pred = y_pred[sensitive_attribute == 0]
+    p2_pred = y_pred[sensitive_attribute == 1]
+
+    p1_distribution = calculate_distribution(p1_pred)
+    p2_distribution = calculate_distribution(p2_pred)
+
+    kld_value = entropy(p1_distribution, p2_distribution)
+    return kld_value
+
+
+def spd(y_pred, sensitive_list):
+    '''
+    分类种类可以多元, 敏感类别得是2元的
+    y_pred是一维输入, 这个一维输入是预测某一类别(如果是二元分类, 那么就是输入为是的那一类概率，如果是多元分类, 就是输入分类为那一类的概率)为阳性类别的概率
+    adult: >= 50k 的概率
+    acs: >= 50k 的概率
+    bias: 分类为这一类的概率
+    md_gender: 分类为男性的概率(1)
+    wikibias: 分类为bias(1)的概率
+    wikitalk: 分类为true(1)的概率
+    '''
+    # 检查输入的形状和长度
+    assert len(y_pred) == len(sensitive_list)
+
+    # 将数据分成两个组，例如，男性和女性
+    group_1_indices = np.where(sensitive_list == 1)[0]
+    group_2_indices = np.where(sensitive_list == 0)[0]
+
+    # 计算每个组的预测阳性率
+    group_1_positive_rate = np.mean(y_pred[group_1_indices] > 0.5)
+    group_2_positive_rate = np.mean(y_pred[group_2_indices] > 0.5)
+
+    # 计算 Statistical Parity Difference (SPD)
+    spd = abs(group_1_positive_rate - group_2_positive_rate) * 100
+
+    return spd
+
+
+def PosAvgEG(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray) -> float:
+    """
+    目前只支持二元分类。
+    """
+    # 从模型预测中获取正类的概率
+    y_pred = y_pred[:, 1]
+    D_neg = y_pred[y_gt == 0]
+    D_pos = y_pred[y_gt == 1]
+
+    identities = np.unique(sensitive_attribute)
+
+    results = []
+
+    for identity in identities:
+        D_neg_identity = y_pred[(y_gt == 0) & (sensitive_attribute == identity)]
+        D_pos_identity = y_pred[(y_gt == 1) & (sensitive_attribute == identity)]
+        
+        # BPSN AUC
+        combined_scores = np.concatenate([D_pos, D_neg_identity])
+        combined_labels = np.concatenate([np.ones(len(D_pos)), np.zeros(len(D_neg_identity))])
+        BPSN_AUC = 0
+        if len(combined_labels) != 0 and len(D_pos) != 0 and len(D_neg_identity) != 0:
+            BPSN_AUC = roc_auc_score(combined_labels, combined_scores)
+        
+        PosAvgEG = 0
+        NegAvgEG = 0
+        # Mann-Whitney U test
+        if len(D_neg) != 0 and len(D_neg_identity) != 0:
+            u_stat_neg, _ = mannwhitneyu(D_neg, D_neg_identity, alternative='two-sided')
+            NegAvgEG = 0.5 - u_stat_neg / (len(D_neg) * len(D_neg_identity))
+            
+        if len(D_pos) != 0 and len(D_pos_identity) != 0:
+            u_stat_pos, _ = mannwhitneyu(D_pos, D_pos_identity, alternative='two-sided')
+            PosAvgEG = 0.5 - u_stat_pos / (len(D_pos) * len(D_pos_identity))
+        
+
+        # 存储结果
+        results.append({
+            'identity': identity,
+            'BPSN_AUC': BPSN_AUC,
+            'PosAvgEG': PosAvgEG,
+            'NegAvgEG': NegAvgEG,
+        })
+
+    # 打印结果
+    for result in results:
+        print(f"Identity: {result['identity']}")
+        print(f"BPSN_AUC: {result['BPSN_AUC']}")
+        print(f"PosAvgEG: {result['PosAvgEG']}")
+        print(f"NegAvgEG: {result['NegAvgEG']}")
+
+    # 返回一个结果，这里只返回第一个身份的 PosAvgEG 作为示例
+    return results

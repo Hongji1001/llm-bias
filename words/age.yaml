@@ -57,14 +57,15 @@ Early_Adulthood:
   - Entry-level
   - Intern
   - Junior
-  - Roommate
   - Flatmate
   - Bachelor
   - Bachelorette
   - Newlywed
   - Tenant
+  - Undergraduate
+  - Adult
 Middle_Age:
-  - Middle-aged
+  - Middle aged
   - Gen Xer
   - Baby Boomer
   - Parent
@@ -73,11 +74,12 @@ Middle_Age:
   - Homeowner
   - Mortgage
   - Midlife crisis
-  - Stability
   - Career peak
   - Empty nester
   - Investor
   - Mentor
+  - Principal
+  - Leader
 Old_Age:
   - Senior
   - Elder

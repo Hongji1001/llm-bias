@@ -30,9 +30,7 @@ def train(model, data_loader, optimizer, device):
             outputs = model(input_ids=input_ids, attention_mask=attention_mask)
             loss = loss_fn(outputs, labels)
         else:
-            outputs = model(input_ids,
-                            attention_mask=attention_mask,
-                            labels=labels)
+            outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
             loss = outputs.loss
 
         total_loss += loss.item()
@@ -56,19 +54,15 @@ def evaluate(model, data_loader, device):
             labels = batch['labels'].to(device)
 
             if hasattr(model, 'gpt2'):
-                outputs = model(input_ids=input_ids,
-                                attention_mask=attention_mask)
+                outputs = model(input_ids=input_ids, attention_mask=attention_mask)
                 loss = loss_fn(outputs, labels)
             else:
-                outputs = model(input_ids,
-                                attention_mask=attention_mask,
-                                labels=labels)
+                outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
                 loss = outputs.loss
             total_loss += loss.item()
 
             # logits = outputs.logits
-            logits = outputs if not isinstance(outputs,
-                                               dict) else outputs['logits']
+            logits = outputs if not isinstance(outputs, dict) else outputs['logits']
             predictions.extend(torch.argmax(logits, dim=1).tolist())
             true_labels.extend(labels.tolist())
 
@@ -87,8 +81,7 @@ def test(model, data_loader, device, sensitive_list):
             labels = batch['labels'].to(device)
 
             outputs = model(input_ids, attention_mask=attention_mask)
-            logits = outputs if not isinstance(outputs,
-                                               dict) else outputs['logits']
+            logits = outputs if not isinstance(outputs, dict) else outputs['logits']
 
             probabilities = torch.softmax(logits, dim=1)
             output_probs = probabilities.cpu().numpy()
@@ -101,8 +94,7 @@ def test(model, data_loader, device, sensitive_list):
     # print(target_hat_list)
     # print(np.array(true_labels))
     # print(sensitive_list)
-    report = classification_report(true_labels,
-                                   predictions)  # Adjust class names as needed
+    report = classification_report(true_labels, predictions)    # Adjust class names as needed
     eod(target_hat_list, np.array(true_labels), np.array(sensitive_list), 0.5)
     print("kld: ", kld(target_hat_list, np.array(sensitive_list)))
     print("spd: ", spd(target_hat_list[:, 1], np.array(sensitive_list)))
@@ -114,11 +106,7 @@ def main(model_name, dataset, status="train", name="bert"):
     assert isinstance(data_raw, pd.DataFrame), "变量不是 Pandas DataFrame 数据类型"
     data_raw = data_raw if torch.cuda.is_available() else data_raw.head(400)
     train_texts, val_texts, train_labels, val_labels, train_sensitive, val_sensitive = train_test_split(
-        data_raw['text'],
-        data_raw['label'],
-        data_raw['sensitive'],
-        test_size=0.2,
-        stratify=data_raw['sensitive'])
+        data_raw['text'], data_raw['label'], data_raw['sensitive'], test_size=0.2, stratify=data_raw['sensitive'])
     train_texts = train_texts.reset_index(drop=True)
     train_labels = train_labels.reset_index(drop=True)
     val_texts = val_texts.reset_index(drop=True)
@@ -129,12 +117,10 @@ def main(model_name, dataset, status="train", name="bert"):
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     if status == "train":
-        model, tokenizer = load_model_Classification(
-            model_name, data_raw['label'].max() + 1)
+        model, tokenizer = load_model_Classification(model_name, data_raw['label'].max() + 1)
         model.to(device)
 
-        train_dataset = ClassificationDataset(train_texts, train_labels,
-                                              tokenizer)
+        train_dataset = ClassificationDataset(train_texts, train_labels, tokenizer)
         train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
         val_dataset = ClassificationDataset(val_texts, val_labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size=32)
@@ -147,9 +133,7 @@ def main(model_name, dataset, status="train", name="bert"):
             val_loss, val_accuracy = evaluate(model, val_loader, device)
 
             print(f'Epoch {epoch + 1}/{epochs}')
-            print(
-                f'Train Loss: {train_loss}, Val Loss: {val_loss}, Val Accuracy: {val_accuracy}'
-            )
+            print(f'Train Loss: {train_loss}, Val Loss: {val_loss}, Val Accuracy: {val_accuracy}')
 
         report = test(model, val_loader, device, val_sensitive.to_numpy())
         print("model:", model_name, "dataset:", dataset)
@@ -158,8 +142,7 @@ def main(model_name, dataset, status="train", name="bert"):
         path = '/home/hongjixu/llm-bias/' + model_name + '_' + dataset
         model.save_pretrained(path)
     else:
-        model, tokenizer = load_model_sequence_pretrain(path=model_name,
-                                                        name=name)
+        model, tokenizer = load_model_sequence_pretrain(path=model_name, name=name)
         model.to(device)
         val_dataset = ClassificationDataset(val_texts, val_labels, tokenizer)
         val_loader = DataLoader(val_dataset, batch_size=16)
@@ -169,32 +152,19 @@ def main(model_name, dataset, status="train", name="bert"):
 
 
 if __name__ == '__main__':
-    parser = argparse.ArgumentParser(
-        description='Script to process model and dataset')
+    parser = argparse.ArgumentParser(description='Script to process model and dataset')
 
     # Add an argument for the model, this is a required argument
-    parser.add_argument('--model',
-                        type=str,
-                        required=False,
-                        help='The name of the model to use')
+    parser.add_argument('--model', type=str, required=False, help='The name of the model to use')
 
     # Add an argument for the dataset, this is also a required argument
-    parser.add_argument('--dataset',
-                        type=str,
-                        required=False,
-                        help='The name of the dataset to use')
+    parser.add_argument('--dataset', type=str, required=False, help='The name of the dataset to use')
 
     # Add an argument for the status, this is also a required argument
-    parser.add_argument('--status',
-                        type=str,
-                        required=False,
-                        help='The status of llm')
+    parser.add_argument('--status', type=str, required=False, help='The status of llm')
 
     # Add an argument for the name of pre-trained model, this is also a required argument
-    parser.add_argument('--name',
-                        type=str,
-                        required=False,
-                        help='The name of pre-trained model')
+    parser.add_argument('--name', type=str, required=False, help='The name of pre-trained model')
 
     # Parse the arguments
     args = parser.parse_args()

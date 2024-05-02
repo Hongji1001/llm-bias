@@ -54,11 +54,12 @@ class ClassificationDataset(Dataset):
 
 class GenerationDataset(Dataset):
 
-    def __init__(self, prompts, texts, tokenizer, dataset, max_len=256):
+    def __init__(self, prompts, texts, tokenizer, dataset, prompt_max_len=32, max_len=128):
         self.prompts = prompts
         self.texts = texts
         self.tokenizer = tokenizer
         self.dataset = dataset
+        self.prompt_max_len = prompt_max_len
         self.max_len = max_len
 
     def __len__(self):
@@ -68,11 +69,11 @@ class GenerationDataset(Dataset):
         prompt = str(self.prompts[idx])
         text = str(self.texts[idx])
 
-        # Encode the prompts
+        # Encode the prompts with prompt_max_len
         prompt_encoding = self.tokenizer.encode_plus(
             prompt,
             add_special_tokens=True,
-            max_length=self.max_len,
+            max_length=self.prompt_max_len,
             return_token_type_ids=False,
             padding='max_length',
             truncation=True,
@@ -80,7 +81,7 @@ class GenerationDataset(Dataset):
             return_tensors='pt',
         )
 
-        # Encode the wikipedia texts
+        # Encode the texts with max_len
         text_encoding = self.tokenizer.encode_plus(
             text,
             add_special_tokens=True,
@@ -102,16 +103,11 @@ class GenerationDataset(Dataset):
 def load_adult():
     data_raw = load_dataset("scikit-learn/adult-census-income")['train']
     data_raw = data_raw.to_pandas()
-    data_raw['text'] = data_raw.iloc[:, :-1].apply(lambda row: ', '.join(
-        [f"{column}:{value}" for column, value in row.items()]),
-                                                   axis=1)
-    data_raw['label'] = data_raw['income'].apply(lambda x: 0
-                                                 if x == '<=50K' else 1)
+    data_raw['text'] = data_raw.iloc[:, :-1].apply(
+        lambda row: ', '.join([f"{column}:{value}" for column, value in row.items()]), axis=1)
+    data_raw['label'] = data_raw['income'].apply(lambda x: 0 if x == '<=50K' else 1)
     data_raw = data_raw[['text', 'label', 'sex']]
-    data_raw['sex'] = data_raw['sex'].replace({
-        'Female': 0,
-        'Male': 1
-    }).astype(int)
+    data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1}).astype(int)
     data_raw = data_raw.rename(columns={'sex': 'sensitive'})
     print(data_raw)
     return data_raw
@@ -120,13 +116,10 @@ def load_adult():
 def load_acs_i():
     with open(script_dir.parent / 'data' / 'config' / 'acs.yaml', 'r') as yaml_file:
         ACSIncome_categories = yaml.safe_load(yaml_file)
-    data_source = ACSDataSource(survey_year='2018',
-                                horizon='1-Year',
-                                survey='person')
+    data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
     ca_data = data_source.get_data(states=["CA"], download=True)
     ca_data = ca_data.sample(frac=0.15, random_state=42)
-    ca_features, ca_labels, _ = ACSIncome.df_to_pandas(
-        ca_data, categories=ACSIncome_categories, dummies=False)
+    ca_features, ca_labels, _ = ACSIncome.df_to_pandas(ca_data, categories=ACSIncome_categories, dummies=False)
     ca_features = ca_features.rename(
         columns={
             'COW': 'Class of worker',
@@ -136,17 +129,10 @@ def load_acs_i():
             'POBP': 'Place of birth',
             'RAC1P': 'Race'
         })
-    ca_features['text'] = ca_features.apply(lambda row: ', '.join(
-        [f"{column}:{value}" for column, value in row.items()]),
-                                            axis=1)
-    ca_features['SEX'] = ca_features['SEX'].replace({
-        'Female': 0,
-        'Male': 1
-    }).astype(int)
-    ca_features['label'] = ca_labels.replace({
-        'False': 0,
-        'True': 1
-    }).astype(int)
+    ca_features['text'] = ca_features.apply(
+        lambda row: ', '.join([f"{column}:{value}" for column, value in row.items()]), axis=1)
+    ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
+    ca_features['label'] = ca_labels.replace({'False': 0, 'True': 1}).astype(int)
     ca_features = ca_features[['text', 'label', 'SEX']]
     ca_features = ca_features.rename(columns={'SEX': 'sensitive'})
     print(ca_features)
@@ -157,11 +143,7 @@ def load_bios():
     data_raw = load_dataset("LabHC/bias_in_bios")['dev']
     data_raw = data_raw.to_pandas()
     # data_raw = data_raw[['hard_text', 'profession']]
-    data_raw = data_raw.rename(columns={
-        'hard_text': 'text',
-        'profession': 'label',
-        'gender': 'sensitive'
-    })
+    data_raw = data_raw.rename(columns={'hard_text': 'text', 'profession': 'label', 'gender': 'sensitive'})
     print(data_raw)
     return data_raw
 
@@ -179,15 +161,10 @@ def load_md_gender():
 
 
 def load_wikibias():
-    file = download_file(
-        'https://docs.google.com/uc?export=download&id=1va3-3oBixdY4WEAOL3AvqcsGc5j2o34G',
-        cache_dir='~/.cache/wiki_bias',
-        filename='train.tsv')
-    data_raw = pd.read_csv(file,
-                           delimiter='\t',
-                           header=None,
-                           names=['text', 'none', 'label'],
-                           index_col=False)
+    file = download_file('https://docs.google.com/uc?export=download&id=1va3-3oBixdY4WEAOL3AvqcsGc5j2o34G',
+                         cache_dir='~/.cache/wiki_bias',
+                         filename='train.tsv')
+    data_raw = pd.read_csv(file, delimiter='\t', header=None, names=['text', 'none', 'label'], index_col=False)
     with open(script_dir.parent / 'words' / 'gender.yaml', 'r') as yaml_file:
         binary_categories = yaml.safe_load(yaml_file)
 
@@ -202,8 +179,8 @@ def load_wikibias():
         else:
             return 2
 
-    data_raw['sensitive'] = data_raw['text'].apply(lambda x: classify_text(
-        x, binary_categories['male'], binary_categories['female']))
+    data_raw['sensitive'] = data_raw['text'].apply(
+        lambda x: classify_text(x, binary_categories['male'], binary_categories['female']))
     data_raw = data_raw[data_raw['sensitive'] != 2]
     data_raw = data_raw[['text', 'label', 'sensitive']]
     print(data_raw)
@@ -229,14 +206,11 @@ def load_wiki_talk():
         else:
             return 2
 
-    data_raw['sensitive'] = data_raw['comment'].apply(lambda x: classify_text(
-        x, binary_categories['male'], binary_categories['female']))
+    data_raw['sensitive'] = data_raw['comment'].apply(
+        lambda x: classify_text(x, binary_categories['male'], binary_categories['female']))
     data_raw = data_raw[data_raw['sensitive'] != 2]
     data_raw = data_raw.rename(columns={'comment': 'text', 'attack': 'label'})
-    data_raw['label'] = data_raw['label'].replace({
-        False: 0,
-        True: 1
-    }).astype(int)
+    data_raw['label'] = data_raw['label'].replace({False: 0, True: 1}).astype(int)
     data_raw = data_raw[['text', 'label', 'sensitive']]
     print(data_raw)
     return data_raw
@@ -255,40 +229,33 @@ def load_bold() -> pd.DataFrame:
 
     data_raw['prompts'] = data_raw['prompts'].apply(tokenize_and_recombine)
     data_raw['wikipedia'] = data_raw['wikipedia'].apply(tokenize_and_recombine)
-    data_raw = data_raw.rename(columns={
-        'wikipedia': 'texts',
-        'domain': 'sensitive'
-    })
+    data_raw = data_raw.rename(columns={'wikipedia': 'texts', 'domain': 'sensitive'})
     print(data_raw)
-    return data_raw.head(3000)
+    return data_raw
 
 
 def load_realtoxic():
-    data_raw = load_dataset("allenai/real-toxicity-prompts")['train']
-    data_raw = data_raw.to_pandas()
-    data_raw = data_raw[data_raw['challenging'] == False]
+    data_raw = load_dataset("allenai/real-toxicity-prompts")
+    data = pd.DataFrame()
+    for split in data_raw.keys():
+        df = data_raw[split].to_pandas()
+        df['split'] = split    # 添加一个列来指明当前行属于哪个数据集分区
+        data = pd.concat([data, df], ignore_index=True)    # 合并DataFrame
+    data_raw = data
+    # data_raw = data_raw[data_raw['challenging'] == False]
     data_raw = data_raw[['prompt', 'continuation', 'challenging']]
     data_raw['prompt'] = data_raw['prompt'].apply(lambda x: x['text'])
     data_raw['continuation'] = data_raw['continuation'].apply(lambda x: x['text'])
     data_raw['continuation'] = data_raw['prompt'] + data_raw['continuation']
-    data_raw = data_raw.rename(columns={
-        'continuation': 'texts',
-        'prompt': 'prompts',
-        'challenging': 'sensitive'
-    })
+    data_raw = data_raw.rename(columns={'continuation': 'texts', 'prompt': 'prompts', 'challenging': 'sensitive'})
     print(data_raw)
     return data_raw
 
 
 def load_local(file_path: Path):
     filename = script_dir.parent / 'data' / file_path
-    data_raw = pd.read_json(filename,
-                            orient='records')
-    data_raw = data_raw.rename(columns={
-        'text': 'texts',
-        'prompt': 'prompts',
-        'domain': 'sensitive'
-    })
+    data_raw = pd.read_json(filename, orient='records')
+    data_raw = data_raw.rename(columns={'text': 'texts', 'prompt': 'prompts', 'domain': 'sensitive'})
     print(data_raw)
     return data_raw
 
@@ -297,10 +264,9 @@ def load_crows_pair(metric_type):
     data_raw = load_dataset("crows_pairs")['test']
     if metric_type == "CPS":
         data_raw = data_raw.to_pandas()
-        data_raw = data_raw.rename(
-            columns={'stereo_antistereo': 'direction'})[[
-                'sent_more', 'sent_less', 'direction', 'bias_type'
-            ]]
+        data_raw = data_raw.rename(columns={'stereo_antistereo': 'direction'})[[
+            'sent_more', 'sent_less', 'direction', 'bias_type'
+        ]]
     return data_raw
 
 
@@ -353,8 +319,7 @@ def load_wino_bias(metric_type):
 
 def load_bias_nli(metric_type):
     data_raw = pd.read_csv(
-        "../dataset/On-Measuring-and-Mitigating-Biased-Inferences-of-Word-Embeddings/gender_bias_cleaned_output.csv"
-    )
+        "../dataset/On-Measuring-and-Mitigating-Biased-Inferences-of-Word-Embeddings/gender_bias_cleaned_output.csv")
     if metric_type == "CPS":
         data_raw = pd.DataFrame({
             'sent_more': data_raw.iloc[:, -2],

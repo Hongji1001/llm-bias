@@ -7,9 +7,11 @@ import pandas as pd
 import torch
 from nltk.translate.bleu_score import corpus_bleu
 from sklearn.model_selection import train_test_split
+from torch.cuda.amp import GradScaler, autocast
 from torch.optim import AdamW
 from torch.utils.data import DataLoader
 from tqdm import tqdm
+from collections import defaultdict
 
 from dataset import GenerationDataset, data_loader
 from metrics import avgGF, gender_polarity, guard, honest, regard, toxicity
@@ -20,30 +22,32 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 
 def prepare_dataset(dataset, status):
-    # Load raw data from the dataset
-    data_raw = data_loader(dataset)
-    # Ensure the data is a Pandas DataFrame
-    assert isinstance(data_raw, pd.DataFrame), "The variable is not a Pandas DataFrame data type"
-    data_raw = data_raw if torch.cuda.is_available() else data_raw.head(100)
-
-    # Split the data
-    train_data, val_data = train_test_split(data_raw, test_size=0.2, stratify=data_raw['sensitive'])
+    if status != 'eval':
+        # Load raw data from the dataset
+        data_raw = data_loader(dataset)
+        # Ensure the data is a Pandas DataFrame
+        assert isinstance(data_raw, pd.DataFrame), "The variable is not a Pandas DataFrame data type"
+        data_raw = data_raw if torch.cuda.is_available() else data_raw.head(100)
     if status == "train":
+        data_raw = data_raw[data_raw['sensitive'] == 'gender']
         # Reset index for data consistency
-        texts = train_data['prompts'].reset_index(drop=True)
-        labels = train_data['texts'].reset_index(drop=True)
+        texts = data_raw['prompts'].reset_index(drop=True)
+        labels = data_raw['texts'].reset_index(drop=True)
         sensitives = None
         category = None
+    elif status == "test":
+        data_raw = data_raw[data_raw['sensitive'] == 'gender']
+        texts = data_raw['prompts'].reset_index(drop=True)
+        labels = data_raw['texts'].reset_index(drop=True)
+        sensitives = data_raw['sensitive'].reset_index(drop=True)
+        category = data_raw['category'].reset_index(drop=True)
     else:
-        texts = val_data['prompts'].reset_index(drop=True)
-        labels = val_data['texts'].reset_index(drop=True)
-        sensitives = val_data['sensitive'].reset_index(drop=True)
-        category = val_data['category'].reset_index(drop=True)
+        texts, labels, sensitives, category = None, None, None, None
 
     return texts, labels, sensitives, category
 
 
-def construct_model_path(model_name, dataset):
+def construct_model_path(model_name, dataset, type):
     """
     Constructs a file path for saving or loading a model. The path is in the
     'checkpoint' directory, located in the parent directory of the current
@@ -70,59 +74,55 @@ def construct_model_path(model_name, dataset):
     checkpoint_directory.mkdir(parents=True, exist_ok=True)
 
     # Construct the final path with model_name and dataset
-    final_path = checkpoint_directory / f"{model_name}_{dataset}"
+    final_path = checkpoint_directory / f"{model_name}_{dataset}_{type}"
 
     return final_path
 
 
 def train(model, data_loader, optimizer, device):
     model.train()
-    total_loss, total_accuracy = 0, 0
-    loss_fn = torch.nn.CrossEntropyLoss()
-
+    total_loss = 0
     for batch in tqdm(data_loader, desc='Training', unit='batch'):
         input_ids = batch['input_ids'][:, :-1].to(device)
         attention_mask = batch['attention_mask'][:, :-1].to(device)
         labels = batch['labels'][:, 1:].to(device)
 
-        optimizer.zero_grad()
-
         outputs = model(input_ids, attention_mask=attention_mask, labels=labels)
         loss = outputs.loss
 
         total_loss += loss.item()
-
+        
+        optimizer.zero_grad()
         loss.backward()
         optimizer.step()
-
     return total_loss / len(data_loader)
 
 
-def test(model, tokenizer, data_loader, sensitives, category, device):
+def test(model, tokenizer, data_loader, sensitives, category, device, type):
     model.eval()
     completions, completions_split, references = [], [], []
-
     with torch.no_grad():
-        for batch in tqdm(data_loader, desc='Evaluating', unit='batch'):
-            input_ids = batch['input_ids'].to(device)
-            labels = batch['labels'].to(device)
-            attention_mask = batch['attention_mask'].to(device)
+        with autocast():
+            for batch in tqdm(data_loader, desc='Testing', unit='batch'):
+                input_ids = batch['input_ids'].to(device)
+                labels = batch['labels'].to(device)
+                attention_mask = batch['attention_mask'].to(device)
 
-            outputs = model.generate(input_ids=input_ids,
-                                     attention_mask=attention_mask,
-                                     max_length=512,
-                                     num_beams=5,
-                                     no_repeat_ngram_size=2,
-                                     early_stopping=True)
+                outputs = model.generate(input_ids=input_ids,
+                                         attention_mask=attention_mask,
+                                         max_length=128,
+                                         num_beams=5,
+                                         no_repeat_ngram_size=2,
+                                         early_stopping=True)
 
-            for output in outputs:
-                completion = tokenizer.decode(output, skip_special_tokens=True)
-                completions.append(completion)
-                completions_split.append(completion.split())
+                for output in outputs:
+                    completion = tokenizer.decode(output, skip_special_tokens=True)
+                    completions.append(completion)
+                    completions_split.append(completion.split())
 
-            for label in labels:
-                reference = tokenizer.decode(label, skip_special_tokens=True)
-                references.append([reference.split()])
+                for label in labels:
+                    reference = tokenizer.decode(label, skip_special_tokens=True)
+                    references.append([reference.split()])
 
     data_to_save = {
         "completions": completions,
@@ -139,7 +139,7 @@ def test(model, tokenizer, data_loader, sensitives, category, device):
     output_file_path.mkdir(parents=True, exist_ok=True)
 
     # Construct the final path for the output file
-    final_path = output_file_path / f"{model.config.model_type}_{data_loader.dataset.dataset}.json"
+    final_path = output_file_path / f"{model.config.model_type}_{data_loader.dataset.dataset}_{type}.json"
 
     with open(final_path, 'w', encoding='utf-8') as f:
         json.dump(data_to_save, f, ensure_ascii=True, indent=4)
@@ -148,7 +148,7 @@ def test(model, tokenizer, data_loader, sensitives, category, device):
     return
 
 
-def evaluate(path):
+def evaluate(path, type):
     start_time = time.time()
     with open(path, 'r', encoding='utf-8') as f:
         loaded_data = json.load(f)
@@ -156,15 +156,15 @@ def evaluate(path):
     completions = loaded_data["completions"]
     completions_split = loaded_data["completions_split"]
     sensitives = loaded_data["sensitives"]
-    references = loaded_data["references"]
+    # references = loaded_data["references"]
     category = loaded_data["category"]
 
     scores = {}
-    scores["bleu"] = corpus_bleu(references, completions_split)
-    scores["toxicity"] = toxicity(completions, sensitives)
-    scores["regard"] = regard(completions, sensitives)
-    scores["honest"] = honest(completions_split, sensitives)
-    scores["gender_polarity"] = gender_polarity(completions, sensitives)
+    # scores["bleu"] = corpus_bleu(references, completions_split)
+    scores["toxicity"] = toxicity(completions, sensitives, category)
+    scores["regard"] = regard(completions, sensitives, category)
+    scores["honest"] = honest(completions_split, sensitives, category)
+    scores["gender_polarity"] = gender_polarity(completions, sensitives, category)
     scores["avgGF"] = avgGF(completions, sensitives, category)
     # scores["guard"] = guard(completions, sensitives)
 
@@ -181,16 +181,28 @@ def evaluate(path):
     output_file_path = output_file_path / 'metrics'
     output_file_path.mkdir(parents=True, exist_ok=True)
     basename = Path(path).name
-    filename = output_file_path / f"eval_output_{basename[:basename.find('.json')]}.txt"
+    filename = output_file_path / f"eval_output_{basename[:basename.find('.json')]}_{type}.log"
+
+    grouped_scores = defaultdict(lambda: defaultdict(dict))
+    for metric, domain in scores.items():
+        print(metric, domain)
+        for category, values in domain.items():
+            for group, score in values.items():
+                grouped_scores[category][group][metric] = score
 
     with open(filename, 'a') as f:
         f.write("=" * 100 + "\n")
         f.write(f"Time: {time.strftime('%Y-%m-%d %H:%M:%S')}\n")
         f.write("-" * 100 + "\n")
-        f.write("Evaluation Scores:\n")
-        for metric, score in scores.items():
-            f.write(f"{metric.capitalize()} Score: {score}\n")
-        f.write("-" * 100 + "\n")
+        
+        for category, groups in grouped_scores.items():
+            f.write(f"{category.capitalize()} Scores:\n")
+            for group, metrics in groups.items():
+                f.write(f"  {group}:\n")
+                for metric, score in metrics.items():
+                    f.write(f"    {metric}: {score}\n")
+            f.write("-" * 100 + "\n")
+        
         execution_time = end_time - start_time
         f.write(f"Function execution time: {execution_time} seconds\n")
         f.write("=" * 100 + "\n")
@@ -198,11 +210,11 @@ def evaluate(path):
     print(f"Scores saved to {filename}")
 
 
-def main(model_name, dataset, status, type="raw", model_path=None):
-    # texts, labels, sensitives, category = prepare_dataset(dataset, status)
-    texts = dataset['texts'].reset_index(drop=True)
-    labels = dataset['texts'].reset_index(drop=True)
-    sensitives, category = None, None
+def main(model_name, dataset, status, type="raw", model_path=None, data_raw=None):
+    texts, labels, sensitives, category = prepare_dataset(dataset, status)
+    # texts = data_raw['texts'].reset_index(drop=True)
+    # labels = data_raw['texts'].reset_index(drop=True)
+    # sensitives, category = None, None
     if status == "train":
         model, tokenizer = load_model_Generation(type="raw", model_name=model_name)
         model.to(device)
@@ -211,30 +223,30 @@ def main(model_name, dataset, status, type="raw", model_path=None):
 
         optimizer = AdamW(model.parameters(), lr=2e-5)
 
-        epochs = 1
+        epochs = 3
         for epoch in range(epochs):
             train_loss = train(model, train_loader, optimizer, device)
             print(f'Epoch {epoch + 1}/{epochs}')
             print(f"Train Loss: {train_loss}")
 
-        path = construct_model_path(model_name, dataset)
+        path = construct_model_path(model_name, dataset, type)
         model.save_pretrained(path)
 
     elif status == "test":
         if model_path is None and type != "raw":
             # Automatically construct the model path for testing if not provided
-            model_path = construct_model_path(model_name, dataset)
+            model_path = construct_model_path(model_name, dataset, type)
             print(f"Constructed model path for testing: {model_path}")
-        model, tokenizer = load_model_Generation(type=type, model_name="gpt2", model_path=model_path)
-        model.to(device)
+        model, tokenizer = load_model_Generation(type=type, model_name=model_name, model_path=model_path)
+        model = model.to(device)
         val_dataset = GenerationDataset(texts, labels, tokenizer, dataset)
         val_loader = DataLoader(val_dataset, batch_size)
-        test(model, tokenizer, val_loader, sensitives, category, device)
+        test(model, tokenizer, val_loader, sensitives, category, device, type)
 
     else:
         output_file_path = Path(
-            __file__).resolve().parent.parent / 'outputs' / 'completions' / f"{model_name}_{dataset}.json"
-        evaluate(output_file_path)
+            __file__).resolve().parent.parent / 'outputs' / 'completions' / f"{model_name}_{dataset}_{type}.json"
+        evaluate(output_file_path, type)
 
 
 if __name__ == '__main__':
@@ -262,4 +274,20 @@ if __name__ == '__main__':
     # using pre-trained gpt2, huggingface bold dataset(not end with .json), generate text
     >>> main("gpt2", "bold", "test", "raw", args.path)
     """
-    main("gpt2", "cnn_dailymail.json", "eval", "raw", args.path)
+    # "bold", "cnn_dailymail.json", "realtoxic_false.json", "imdb.json",
+    # "jigsaw_toxic.json", "stereoset_new.json", "wikitext.json",
+    # "wikitoxic.json"
+    for testset in [
+            "realtoxic_2k.json","wikitext_2k.json","imdb_2k.json","wikitoxic_2k.json", "jigsaw_2k.json", 
+    ]:
+        main("gpt2", testset, "eval", "INLP", args.path)
+        # main("xlnet", testset, "eval", "CDA", args.path)
+        # main("gpt2", testset, "eval", "finetune", args.path)
+        # main("xlnet", testset, "eval", "finetune", args.path)
+    # main("gpt2", "cnn_dailymail_2k.json", "eval", "CDA", args.path)
+    # main("xlnet", "cnn_dailymail_2k.json", "eval", "CDA", args.path)
+    # main("xlnet", "cnn_dailymail_2k.json", "eval", "finetune", args.path)
+    # main("xlnet", "realtoxic_2k.json", "eval", "raw", args.path)
+    # main("gpt2", "realtoxic_2k.json", "eval", "raw", args.path)
+    # main("xlnet", "jigsaw_2k.json", "eval", "raw", args.path)
+    # main("gpt2", "cnn_dailymail.json", "eval", "raw", args.path)
