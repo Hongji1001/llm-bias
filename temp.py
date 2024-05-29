@@ -121,5 +121,24 @@ def MWU():
 # with open(file_path, 'w') as f:
 #     f.write(jsonl_str)
 
+def reorgnizedataset():
+    file1_path = 'data/realtoxic_2k.jsonl'
+    df1 = pd.read_json(file1_path, lines=True)
+    print(df1.groupby(['domain']).size())
+    print(df1.groupby(['domain', 'category']).size())
+    filtered_df = df1[df1['domain'] == 'gender']
+
+    file2_path = 'data/realtoxic_.json'
+    df2 = pd.read_json(file2_path, lines=True)
+
+    df2 = pd.concat([df2, filtered_df], ignore_index=True)
+    print(df2.groupby(['domain']).size())
+    print(df2.groupby(['domain', 'category']).size())
+    output_path = 'realtoxic_new.jsonl'
+    df2.to_json(output_path, orient='records', lines=True)
+
+    print("Data has been successfully merged and saved.")
+
 if __name__ == '__main__':
-    load_jigsaw()
+    # load_jigsaw('gender')
+    reorgnizedataset()

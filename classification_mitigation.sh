@@ -81,7 +81,7 @@ case $method in
     echo "Running context-debias method"
 
     setup_verifier context-debias
-    context_debias_models=("albert" "dbert")
+    context_debias_models=("bert" "roberta" "albert" "dbert" "deberta")
 
     cd context-debias/script || exit
     for model in "${context_debias_models[@]}"; do
@@ -100,44 +100,47 @@ case $method in
     echo "Running auto-debias method"
 
     setup_verifier auto-debias
-    auto_debias_models=("bert-base-uncased" "roberta-base" "albert-base-v2")
-    auto_debias_model_types=("bert" "roberta" "albert")
+    auto_debias_models=("bert-base-uncased" "roberta-base" "albert-base-v2" "distilbert-base-uncased" "microsoft/deberta-v3-base")
+    auto_debias_model_types=("bert" "roberta" "albert" "dbert" "deberta")
 
     for i in "${!auto_debias_models[@]}"; do
         model_name=${auto_debias_models[i]}
         model_type=${auto_debias_model_types[i]}
-        python generate_prompts.py --debias_type gender --model_type "$model_type" --model_name_or_path "$model_name"
+        # python generate_prompts.py --debias_type gender --model_type "$model_type" --model_name_or_path "$model_name"
         prompts_file="prompts_${model_name}_gender"
         python auto-debias.py --debias_type gender --model_type "$model_type" --model_name_or_path "$model_name" --prompts_file "$prompts_file"
+        prompts_file="prompts_${model_name}_religion"
+        python auto-debias.py --debias_type race --model_type "$model_type" --model_name_or_path "$model_name" --prompts_file "$prompts_file"
     done
 
-    conda activate bias-benchmark
-    for model in "${auto_debias_models[@]}"; do
-        python classification_benchmark.py --model_name_or_path Auto-Debias/model/debiased_model_bert-base-uncased_gender
-    done
+    # conda activate bias-benchmark
+    # for model in "${auto_debias_models[@]}"; do
+    #     python classification_benchmark.py --model_name_or_path Auto-Debias/model/debiased_model_bert-base-uncased_gender
+    # done
     ;;
 
 "adept")
     echo "Running adept method"
     setup_verifier adept
 
-    adept_models=("albert" "dbert")
-    adept_models_types=("albert-base-v2" "distilbert-base-uncased")
-    cd ADEPT/script || exit
+    adept_models=("roberta" "albert" "dbert")
+    adept_models_types=("roberta-base" "albert-base-v2" "distilbert-base-uncased")
+    cd adept/script || exit
 
     # Iterate over models and run the collect_sentences.sh and debias.sh scripts
     for model in "${adept_models[@]}"; do
-        bash ./collect_sentences.sh "$model" ../data/news-commentary-v15.en gender final
-        bash ./debias.sh "$model" 0 ADEPT gender
+        # bash ./collect_sentences.sh "$model" ../data/news-commentary-v15.en gender final
+        bash ./debias.sh "$model" 3 ADEPT gender
+        # bash ./debias.sh "$model" 3 ADEPT religion # TODO: not run
     done
 
-    cd ../..
-    conda activate bias-benchmark
-    for i in "${!adept_models[@]}"; do
-        model_name=${adept_models[i]}
-        model_type=${adept_models_types[i]}
-        python classification_benchmark.py --model_name_or_path ADEPT/debiased_models/42/"${model}"/ADEPT/gender/final/best_model_ckpt
-    done
+    # cd ../..
+    # conda activate bias-benchmark
+    # for i in "${!adept_models[@]}"; do
+    #     model_name=${adept_models[i]}
+    #     model_type=${adept_models_types[i]}
+    #     python classification_benchmark.py --model_name_or_path ADEPT/debiased_models/42/"${model}"/ADEPT/gender/final/best_model_ckpt
+    # done
     ;;
 
 "*")

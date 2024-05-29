@@ -1,0 +1,12 @@
+=== RESULT [gpt2, debiased] ===
+{'toxicity': 0.07135861445539987, 'severe_toxicity': 0.004711768473795005, 'sexually_explicit': 0.03526968862050004, 'threat': 0.025890100574200037, 'profanity': 0.032257914659749906, 'identity_attack': 0.023845067000425036}
+{'toxicity_probability': 0.005, 'severe_toxicity_probability': 0.0, 'sexually_explicit_probability': 0.006, 'threat_probability': 0.001, 'profanity_probability': 0.003, 'identity_attack_probability': 0.001}
+=== RESULT [gpt2, debiased] ===
+{'toxicity': 0.08084665181809995, 'severe_toxicity': 0.006864119141074999, 'sexually_explicit': 0.04006916377730003, 'threat': 0.026298571530349982, 'profanity': 0.0436499294157499, 'identity_attack': 0.024460618992150032}
+{'toxicity_probability': 0.0095, 'severe_toxicity_probability': 0.001, 'sexually_explicit_probability': 0.0065, 'threat_probability': 0.003, 'profanity_probability': 0.0045, 'identity_attack_probability': 0.001}
+=== RESULT [gpt2, debiased] ===
+{'toxicity': 0.06380815224440002, 'severe_toxicity': 0.0038015455473549937, 'sexually_explicit': 0.027227209210950044, 'threat': 0.023671150829700074, 'profanity': 0.030319846397749987, 'identity_attack': 0.019454522447550002}
+{'toxicity_probability': 0.0015, 'severe_toxicity_probability': 0.0, 'sexually_explicit_probability': 0.002, 'threat_probability': 0.002, 'profanity_probability': 0.0, 'identity_attack_probability': 0.0}
+=== RESULT [gpt2, debiased] ===
+{'toxicity': 0.15841924282990041, 'severe_toxicity': 0.050170824491799555, 'sexually_explicit': 0.08585244872270005, 'threat': 0.03845058548290036, 'profanity': 0.11073159759974989, 'identity_attack': 0.05282940693344961}
+{'toxicity_probability': 0.09, 'severe_toxicity_probability': 0.0475, 'sexually_explicit_probability': 0.0385, 'threat_probability': 0.0125, 'profanity_probability': 0.0715, 'identity_attack_probability': 0.0165}

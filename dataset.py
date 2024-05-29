@@ -1,4 +1,6 @@
+import json
 from sklearn.model_selection import train_test_split
+from tqdm import tqdm
 import yaml
 from torch.utils.data import Dataset
 from pathlib import Path
@@ -122,28 +124,51 @@ class MLMClassificationDataset(Dataset):
 script_dir = Path(__file__).resolve().parent
 
 
-def load_adult():
+def load_adult(protected_group):
+    if protected_group not in ['gender', 'race', 'age']:
+        print(f"adult do not support protected group {protected_group}")
+        return None
+    
     data_raw = load_dataset("scikit-learn/adult-census-income")['train']
     data_raw = data_raw.to_pandas()
 
     data_raw['text'] = data_raw.iloc[:, :-1].apply(
         lambda row: ', '.join([f"{column}:{value}" for column, value in row.items()]), axis=1)
     data_raw['label'] = data_raw['income'].apply(lambda x: 0 if x == '<=50K' else 1)
-    data_raw = data_raw[['text', 'label', 'sex']]
-    data_raw['sex'] = data_raw['sex'].replace({'Female': 0, 'Male': 1}).astype(int)
-    data_raw = data_raw.rename(columns={'sex': 'sensitive'})
-
+    
+    # Categorize age into four groups
+    def categorize_age(age):
+        if age <= 17:
+            return 'minor'
+        elif 18 <= age <= 65:
+            return 'young'
+        elif 66 <= age <= 79:
+            return 'middle_aged'
+        else:
+            return 'elderly'
+        
+    if protected_group == 'gender':
+        data_raw = data_raw.rename(columns={'sex': 'sensitive'})
+    elif protected_group == 'race':
+        data_raw = data_raw.rename(columns={'race': 'sensitive'})
+    elif protected_group == 'age':
+        data_raw['age_group'] = data_raw['age'].apply(categorize_age)
+        data_raw = data_raw.rename(columns={'age_group': 'sensitive'})
+        
+    data_raw = data_raw[['text', 'label', 'sensitive']]
+        
     train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=42)
-
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
-
+    print("loading adult")
     print(data_raw)
-
     return data_raw
 
 
-def load_acsi():
+def load_acsi(protected_group):
+    if protected_group not in ['gender', 'race']:
+        print(f"acsi do not support protected group {protected_group}")
+        return None
     with open(script_dir / 'data' / 'config' / 'acs.yaml', 'r') as yaml_file:
         ACSIncome_categories = yaml.safe_load(yaml_file)
     data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
@@ -161,15 +186,18 @@ def load_acsi():
         })
     ca_features['text'] = ca_features.apply(
         lambda row: ', '.join([f"{column}:{value}" for column, value in row.items()]), axis=1)
-    ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
+    # ca_features['SEX'] = ca_features['SEX'].replace({'Female': 0, 'Male': 1}).astype(int)
     ca_features['label'] = ca_labels.replace({'False': 0, 'True': 1}).astype(int)
-    ca_features = ca_features[['text', 'label', 'SEX']]
-    ca_features = ca_features.rename(columns={'SEX': 'sensitive'})
+    if protected_group == 'gender':
+        ca_features = ca_features.rename(columns={'SEX': 'sensitive'})
+    elif protected_group == 'race':
+        ca_features = ca_features.rename(columns={'Race': 'sensitive'})
+    ca_features = ca_features[['text', 'label', 'sensitive']]
     train_idx, test_idx = train_test_split(ca_features.index, test_size=0.2, random_state=42)
 
     ca_features['split'] = 'test'
     ca_features.loc[train_idx, 'split'] = 'train'
-
+    print("loading acsi")
     print(ca_features)
     return ca_features
 
@@ -187,7 +215,10 @@ def load_bios():
     return data_sampled
 
 
-def load_mdgender():
+def load_mdgender(protected_group):
+    if protected_group not in ['gender']:
+        print(f"mdgender do not support protected group {protected_group}")
+        return None
     data_raw = load_dataset("md_gender_bias", "funpedia")
     data = pd.DataFrame()
     for split in data_raw.keys():
@@ -204,7 +235,10 @@ def load_mdgender():
     return data_raw
 
 
-def load_wikibias():
+def load_wikibias(protected_group):
+    if protected_group not in ['gender']:
+        print(f"wikibias do not support protected group {protected_group}")
+        return None
     file = download_file('https://docs.google.com/uc?export=download&id=1va3-3oBixdY4WEAOL3AvqcsGc5j2o34G',
                          cache_dir='~/.cache/wiki_bias',
                          filename='train.tsv')
@@ -231,11 +265,15 @@ def load_wikibias():
 
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
+    print("loading wikibias")
     print(data_raw)
     return data_raw
 
 
-def load_wikitalk():
+def load_wikitalk(protected_group):
+    if protected_group not in ['gender']:
+        print(f"wikitalk do not support protected group {protected_group}")
+        return None
     data_raw = load_dataset("dirtycomputer/Wikipedia_Talk_Labels")['train']
     data_raw = data_raw.to_pandas()
     data_raw = data_raw[data_raw['comment'].apply(len) <= 1024]
@@ -263,31 +301,112 @@ def load_wikitalk():
     train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=42)
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
+    print("loading wikitalk")
     print(data_raw)
     return data_raw
 
+def load_jigsaw(protected_group):
+    if protected_group not in ['gender', 'race', 'religion', 'sexual_orientation']:
+        print(f"jigsaw do not support protected group {protected_group}")
+        return None
+    file_path = Path('data/jigsaw.jsonl')
+    if file_path.is_file():
+        data_raw = pd.read_json(file_path, lines=True)
+        # TODO: check whether split different domain
+        data_raw = data_raw[data_raw['domain'] == protected_group]
+        print(data_raw)
+        return data_raw
+    else:
+        print("Generating jigsaw.jsonl for the first time")
+        
+    all_data = pd.read_csv('data/all_data.csv')
+    
+    # Initialize a list to collect the rows for each domain
+    processed_data = []
 
-def load_jigsaw():
-    data_raw = pd.read_csv("data/identity_individual_annotations.csv")
-    # data_sampled = data_raw.rename(columns={'hard_text': 'text', 'profession': 'label', 'gender': 'sensitive'})
-    data_raw = data_raw[data_raw['gender'].isin(['male', 'female'])]
-    data_raw.reset_index(drop=True, inplace=True)
-    print(data_raw)
-    return data_raw
+    # Define domains and categories
+    domains = {
+        "gender": ['male', 'female'],
+        # "disability": ['psychiatric_or_mental_illness', 'intellectual_or_learning_disability', 'physical_disability'],
+        "race": ['black', 'white', 'asian'],
+        "religion": ['christian', 'muslim', 'jewish'],
+        "sexual_orientation" : ['heterosexual', 'homosexual_gay_or_lesbian', 'bisexual'],
+    }
+
+    # Process the data for each domain
+    for index, row in tqdm(all_data.iterrows(), total=all_data.shape[0], desc="Processing rows"):
+        for domain, categories in domains.items():
+            # Filter the columns based on the domain categories
+            domain_values = {category: row[category] for category in categories}
+            valid_categories = [key for key, value in domain_values.items() if value >= 0.5]
+
+            if len(valid_categories) == 1:
+                # Create a new row with the desired format
+                new_row = {
+                    "domain": domain,
+                    "sensitive": valid_categories[0],
+                    "split": row['split'],
+                    "text": row['comment_text'],
+                    "label": 1 if row['toxicity'] >= 0.5 else 0
+                }
+                processed_data.append(new_row)
+
+    # Convert the list to a DataFrame
+    processed_df = pd.DataFrame(processed_data)
+
+    # Save the DataFrame to a JSON Lines file
+    processed_df.to_json('data/jigsaw.jsonl', orient='records', lines=True)
+    
+    # Calculate and print aggregated statistics
+    aggregation = processed_df.groupby(['split', 'domain', 'sensitive', 'label']).size().reset_index(name='count')
+    train_counts = aggregation[aggregation['split'] == 'train']
+    test_counts = aggregation[aggregation['split'] == 'test']
+    print("loading jigsaw")
+    print("Train split counts:")
+    print(train_counts)
+    print("\nTest split counts:")
+    print(test_counts)
+    processed_df = processed_df[processed_df['domain'] == protected_group]
+    print(processed_df)
+    return processed_df
 
 
-def load_classification_dataset(dataset):
+def load_classification_dataset(dataset, protected_group):
     if dataset == "adult":
-        return load_adult()
+        return load_adult(protected_group)
     elif dataset == "acs":
-        return load_acsi()
+        return load_acsi(protected_group)
     elif dataset == "bios":
         return load_bios()
     elif dataset == "mdgender":
-        return load_mdgender()
+        return load_mdgender(protected_group)
     elif dataset == "wikibias":
-        return load_wikibias()
+        return load_wikibias(protected_group)
     elif dataset == "wikitalk":
-        return load_wikitalk()
+        return load_wikitalk(protected_group)
+    elif dataset == "jigsaw":
+        return load_jigsaw(protected_group)
     else:
         raise NameError(dataset)
+    
+
+def load_realtoxic():
+    data_raw = load_dataset("allenai/real-toxicity-prompts")
+    data = pd.DataFrame()
+    for split in data_raw.keys():
+        df = data_raw[split].to_pandas()
+        df['split'] = split    # 添加一个列来指明当前行属于哪个数据集分区
+        data = pd.concat([data, df], ignore_index=True)    # 合并DataFrame
+    data_raw = data
+    # data_raw = data_raw[data_raw['challenging'] == False]
+    data_raw = data_raw[['prompt', 'continuation', 'challenging']]
+    data_raw['toxicity'] = data_raw['prompt'].apply(lambda x: x['toxicity'])
+    data_raw['prompt'] = data_raw['prompt'].apply(lambda x: x['text'])
+    data_raw['continuation'] = data_raw['continuation'].apply(lambda x: x['text'])
+    data_raw['continuation'] = data_raw['prompt'] + data_raw['continuation']
+    def extract_toxicity(json_str):
+        json_obj = json.loads(json_str)
+        return json_obj.get('toxicity', None)
+    data_raw = data_raw.rename(columns={'continuation': 'texts', 'prompt': 'prompts', 'challenging': 'sensitive'})
+    print(data_raw)
+    return data_raw

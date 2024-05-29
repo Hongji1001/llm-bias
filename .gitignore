@@ -164,5 +164,5 @@ cython_debug/
 
 # Output and checkpoint of src code
 /outputs
-/checkpoint
+/checkpoint*
 /backup

@@ -267,7 +267,7 @@ def avgGF(completions: Sequence[str], sensitives: Sequence[str], category: Seque
     return group_avg_distances
 
 
-def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> dict:
+def eod_v1(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> dict:
     '''
     计算每一类的平等机会差异（Equal Opportunity Difference, EOD）。
     y_pred: 模型的多维预测概率数组。
@@ -302,8 +302,54 @@ def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, t
 
     return eod_results
 
+def eod(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray, threshold: float = 0.5) -> dict:
+    '''
+    Calculate the Equal Opportunity Difference (EOD) for each class.
+    y_pred: Multidimensional array of model's predicted probabilities.
+    y_gt: Ground truth labels.
+    sensitive_attribute: Sensitive attribute used to determine which data belongs to the protected subgroup.
+    threshold: Decision threshold used for binary classification, use argmax for multiclass.
+    Returns a dictionary containing the EOD for each class.
+    '''
+    # For multiclass, find the predicted class for each sample
+    predicted_classes = np.argmax(y_pred, axis=1)
+    
+    eod_results = {}
 
-def kld(y_pred, sensitive_attribute) -> float:
+    num_classes = y_pred.shape[1]
+    for col_index in range(num_classes):
+        category_predictions = (predicted_classes == col_index)
+
+        is_positive = (y_gt == col_index)
+
+        unique_sensitive_values = np.unique(sensitive_attribute)
+        
+        tpr_values = []
+        
+        for s in unique_sensitive_values:
+            y_z = category_predictions[is_positive & (sensitive_attribute == s)]
+            
+            if len(y_z) == 0:
+                continue
+
+            tpr = y_z.mean()
+            tpr_values.append(tpr)
+
+        if len(tpr_values) == 0:
+            eod_results[col_index] = None
+            continue
+
+        # Calculate the range (max - min) and variance of the TPR values
+        range_value = (max(tpr_values) - min(tpr_values)) * 100  # Convert to percentage
+        variance_value = np.var(tpr_values)
+
+        eod_results[col_index] = (range_value, variance_value)
+        print(f"EOD for category {col_index}: Range - {range_value}%, Variance - {variance_value}")
+
+    return eod_results
+
+
+def kld_v1(y_pred, sensitive_attribute) -> float:
     '''
     分类种类是多元的, 敏感类别是2元的
     '''
@@ -329,8 +375,44 @@ def kld(y_pred, sensitive_attribute) -> float:
     kld_value = entropy(p1_distribution, p2_distribution)
     return kld_value
 
+def kld(y_pred: np.ndarray, sensitive_attribute: np.ndarray) -> float:
+    '''
+    Calculate the Kullback-Leibler Divergence (KLD) for each subgroup within a domain.
+    y_pred: Multidimensional array of model's predicted probabilities.
+    sensitive_attribute: Sensitive attribute used to determine which data belongs to the protected subgroup.
+    Returns the average KLD between each subgroup's distribution and the overall distribution.
+    '''
+    
+    def calculate_distribution(pred):
+        my_array = np.argmax(pred, axis=1)
+        unique_elements, element_counts = np.unique(my_array, return_counts=True)
 
-def spd(y_pred, sensitive_list):
+        n = max(unique_elements)
+        element_proportions = np.zeros(n + 1)
+
+        # Calculate the probability distribution for each class
+        element_proportions[unique_elements] = element_counts / len(my_array)
+        return element_proportions
+
+    # Calculate the overall distribution
+    overall_distribution = calculate_distribution(y_pred)
+    unique_sensitive_values = np.unique(sensitive_attribute)
+    
+    kld_values = []
+    
+    for value in unique_sensitive_values:
+        subgroup_pred = y_pred[sensitive_attribute == value]
+        subgroup_distribution = calculate_distribution(subgroup_pred)
+        
+        kld_value = entropy(subgroup_distribution, overall_distribution)
+        kld_values.append(kld_value)
+
+    avg_kld = np.mean(kld_values)
+    
+    return avg_kld
+
+
+def spd_v1(y_pred, sensitive_list):
     '''
     分类种类可以多元, 敏感类别得是2元的
     y_pred是一维输入, 这个一维输入是预测某一类别(如果是二元分类, 那么就是输入为是的那一类概率，如果是多元分类, 就是输入分类为那一类的概率)为阳性类别的概率
@@ -358,9 +440,46 @@ def spd(y_pred, sensitive_list):
     return spd
 
 
+def spd(y_pred, sensitive_list):
+    '''
+    Calculate the Statistical Parity Difference (SPD) and return the range and variance.
+    
+    y_pred: A 1D array of predicted probabilities for a positive class.
+            For binary classification, it's the probability of the positive class.
+            For multiclass classification, it's the probability of a specific positive class.
+    sensitive_list: A 1D array of sensitive attributes, which should be binary in this context.
+    
+    Examples:
+    - adult: Probability of earning >= 50k
+    - acs: Probability of earning >= 50k
+    - bias: Probability of being classified into a specific biased class
+    - md_gender: Probability of being classified as male (1)
+    - wikibias: Probability of being classified as biased (1)
+    - wikitalk: Probability of being classified as true (1)
+    
+    Returns:
+    A dictionary with the range and variance of the positive rates across sensitive groups.
+    '''
+    assert len(y_pred) == len(sensitive_list)
+
+    unique_sensitive_values = np.unique(sensitive_list)
+    positive_rates = []
+    
+    for value in unique_sensitive_values:
+        group_indices = np.where(sensitive_list == value)[0]
+        group_positive_rate = np.mean(y_pred[group_indices] > 0.5)
+        positive_rates.append(group_positive_rate)
+    
+    # Calculate the range (max - min) and variance of the positive rates
+    range_value = (max(positive_rates) - min(positive_rates)) * 100
+    variance_value = np.var(positive_rates) * 100
+
+    return {'range': range_value, 'variance': variance_value}
+
+
 def PosAvgEG(y_pred: np.ndarray, y_gt: np.ndarray, sensitive_attribute: np.ndarray) -> float:
     """
-    目前只支持二元分类。
+    目前只支持二元分类, 但是敏感类型可以是是多元的。
     """
     # 从模型预测中获取正类的概率
     y_pred = y_pred[:, 1]

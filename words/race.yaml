@@ -5,57 +5,35 @@ White:
   - Mediterranean
   - Nordic
   - Baltic
-  - Anglo-Saxon
-  - Western
-  - Middle Eastern
-  - Eastern European
-  - Western European
-  - Scandinavian
-  - Irish
-  - German
-  - French
   - white people
+  - Euro American
+  - Anglo
+  - Nordic
+  - Anglo-Saxon
+  - Slavic
+  - Mediterranean
+  - Scandinavian
+  - Celtic
+  - Teutonic
 
-Black_or_African_American:
-  - African
+Black:
+  - African people
   - Caribbean
-  - Afro American
-  - Sub-Saharan
-  - West African
-  - East African
-  - South African
-  - Central African
-  - Diasporic
-  - Creole
-  - Afro Caribbean
-  - Afro Latin
+  - Afro
+  - African
+  - black people
+  - dark skinned
+  - dark skin
+  - African American
+  - African descent
+  - Person of Color
+  - Black African
   - Ethiopian
-  - Nigerian
-  - Congolese
-
-American_Indian_or_Alaska_Native:
-  - American Indian
-  - Indigenous
-  - Native American
-  - First Nations
-  - Inuit
-  - Cherokee
-  - Navajo
-  - Sioux
-  - Chippewa
-  - Mojave
-  - Apache
-  - Iroquois
-  - Pueblo
-  - Alaskan Native
-  - Tlingit
-  - Haida
+  - Sub-Saharan African
 
 Asian:
   - Asian
-  - East Asian
-  - South Asian
-  - Southeast Asian
+  - ABC
   - Chinese
   - Indian
   - Japanese
@@ -68,36 +46,9 @@ Asian:
   - Mongolian
   - Nepali
   - Tibetan
-
-Native_Hawaiian_or_Other_Pacific_Islander:
-  - Polynesian
-  - Micronesian
-  - Melanesian
-  - Hawaiian
-  - Samoan
-  - Guamanian
-  - Chamorro
-  - Maori
-  - Tahitian
-  - Fijian
-  - Palauan
-  - Marshallese
-  - Tongan
-  - Niuean
-  - Tokelauan
-
-Some_Other_Race:
-  - Mixed Race
-  - Bi racial
-  - Multi-ethnic
-  - Inter racial
-  - Dual heritage
-  - Multi racial
-  - Cosmopolitan
-  - Universal
-  - Diverse
-  - Hybrid
-  - Cross cultural
-  - Transnational
-  - Mixed origin
-  - Multi cultural
+  - East Asian
+  - Pacific Islander
+  - Taiwanese
+  - Malaysian
+  - Singaporean
+  - Indonesian

@@ -9,11 +9,10 @@ from torch.utils.data import DataLoader
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
 
-def gen_completions(model, tokenizer, dataset, filename='completions'):
+def gen_completions(model, tokenizer, dataset, batch_size, filename='completions'):
     model.eval()
     device = 'cuda'
     model.to(device)
-    batch_size = 16
     texts = dataset['prompts'].reset_index(drop=True)
     labels = dataset['texts'].reset_index(drop=True)
     sensitives = dataset['domain'].reset_index(drop=True)
@@ -87,7 +86,7 @@ if __name__ == '__main__':
                         required=False,
                         help='A jsonl file to store output completions')
     args = parser.parse_args()
-    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path)
+    model = AutoModelForCausalLM.from_pretrained(args.model_name_or_path).half()
     tokenizer = AutoTokenizer.from_pretrained(args.model_name_or_path)
     df = pd.read_json(args.prompt_file, lines=True)
     gen_completions(model, tokenizer, df, args.filename)

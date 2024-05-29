@@ -8,7 +8,7 @@ from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 
 from dataset import MLMClassificationDataset, load_classification_dataset
-from metrics import PosAvgEG, eod, kld, spd
+from metrics import PosAvgEG, eod, kld, spd, eod_v1, kld_v1, spd_v1
 from torch.utils.data import DataLoader
 
 
@@ -54,6 +54,11 @@ def test_mlm_for_classification(model, tokenizer, dataset, outputpath):
     print("kld: ", kld_result)
     spd_result = spd(target_hat_list[:, 1], np.array(sensitive_list))
     print("spd: ", spd_result)
+    # eod_result = eod_v1(target_hat_list, np.array(true_labels), np.array(sensitive_list), 0.5)
+    # kld_result = kld_v1(target_hat_list, np.array(sensitive_list))
+    # print("kld_1: ", kld_result)
+    # spd_result = spd_v1(target_hat_list[:, 1], np.array(sensitive_list))
+    # print("spd_v1: ", spd_result)
     PosAvgEG_result = PosAvgEG(target_hat_list, np.array(true_labels), np.array(sensitive_list))
     
     with open(outputpath, 'a') as f:

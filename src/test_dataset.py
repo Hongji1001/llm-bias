@@ -189,9 +189,9 @@ def select_top_2k_per_category(df):
 def main():
     parser = argparse.ArgumentParser(description='Process text to extract prompts based on categories.')
     parser.add_argument('--file_name', type=str, help='Path to the YAML file containing categories dictionary')
-    parser.add_argument('--sentence_threshold', type=int, default=40, help='Sentence length threshold')
+    parser.add_argument('--sentence_threshold', type=int, default=20, help='Sentence length threshold')
     parser.add_argument('--prompt_length', type=int, default=10, help='Prompt length in terms of number of words')
-    parser.add_argument('--num_processes', type=int, default=20, help='Number of processes to use')
+    parser.add_argument('--num_processes', type=int, default=40, help='Number of processes to use')
     args = parser.parse_args()
 
     script_dir = Path(__file__).resolve().parent
@@ -200,17 +200,18 @@ def main():
     occupation_dict = load_categories(wordlists_dir / "occupation.yaml")
     religion_dict = load_categories(wordlists_dir / "religion.yaml")
     age_dict = load_categories(wordlists_dir / "age.yaml")
+    race_dict = load_categories(wordlists_dir / "race.yaml")
 
-    categories_dict = {'gender': gender_dict, 'occupation': occupation_dict, 'religion': religion_dict, 'age': age_dict}
-    # dataset = load_dataset("SetFit/toxic_conversations")
-    # data = pd.DataFrame()
-    # for split in dataset.keys():
-    #     df = dataset[split].to_pandas()
-    #     df['split'] = split  # 添加一个列来指明当前行属于哪个数据集分区
-    #     data = pd.concat([data, df], ignore_index=True)  # 合并DataFrame
-    # # data = data[data['label'] == 1]
-    # data_chunks = np.array_split(data['text'], args.num_processes)
-    # file_name = "jigsaw_toxic_2k.json"
+    categories_dict = {'gender': gender_dict, 'occupation': occupation_dict, 'religion': religion_dict, 'age': age_dict, 'race': race_dict}
+    dataset = load_dataset("SetFit/toxic_conversations")
+    data = pd.DataFrame()
+    for split in dataset.keys():
+        df = dataset[split].to_pandas()
+        df['split'] = split  # 添加一个列来指明当前行属于哪个数据集分区
+        data = pd.concat([data, df], ignore_index=True)  # 合并DataFrame
+    # data = data[data['label'] == 1]
+    data_chunks = np.array_split(data['text'], args.num_processes)
+    file_name = "jigsaw_toxic_2k_.json"
 
     # dataset = load_dataset("imdb")
     # data = pd.DataFrame()
@@ -219,7 +220,7 @@ def main():
     #     df['split'] = split  # 添加一个列来指明当前行属于哪个数据集分区
     #     data = pd.concat([data, df], ignore_index=True)  # 合并DataFrame
     # data_chunks = np.array_split(data['text'], args.num_processes)
-    # file_name = "imdb_2k.json"
+    # file_name = "imdb_2k_temp.json"
 
     # dataset = load_dataset("OxAISH-AL-LLM/wiki_toxic")
     # data = pd.DataFrame()
@@ -248,35 +249,55 @@ def main():
     # data_chunks = np.array_split(dataset, args.num_processes)
     # file_name = "stereoset_new.json"
 
-    data = load_realtoxic()
-    print(data)
-    data_chunks = np.array_split(data, args.num_processes)
-    file_name = Path(
-        __file__).resolve().parent.parent / 'data' / "realtoxic_2k.json"
+    # data = load_realtoxic()
+    # print(data)
+    # data_chunks = np.array_split(data, args.num_processes)
+    # file_name = Path(
+    #     __file__).resolve().parent.parent / 'data' / file_name
 
+    # manager = multiprocessing.Manager()
+    # results_queue = manager.Queue()
+    # processes = []
+    # for i, data_chunk in enumerate(data_chunks):
+    #     # for categorize from corpus/texts
+    #     p = multiprocessing.Process(target=worker,
+    #                                 args=(i, data_chunk, categories_dict, args.sentence_threshold, args.prompt_length,
+    #                                       results_queue))
+
+    #     # for categorize from prompts
+    #     # p = multiprocessing.Process(target=worker_prompt,
+    #     #                             args=(i, data_chunk['prompts'],
+    #     #                                   data_chunk['texts'], categories_dict,
+    #     #                                   results_queue))
+    #     processes.append(p)
+    #     p.start()
+
+    # # Collect results from each process
+    # results = []
+    # for _ in range(args.num_processes):
+    #     results.extend(results_queue.get())
+
+    # # Wait for all processes to complete
+    # for p in processes:
+    #     p.join()
     manager = multiprocessing.Manager()
     results_queue = manager.Queue()
     processes = []
+    mode = 'text'
     for i, data_chunk in enumerate(data_chunks):
-        # for categorize from corpus/texts
-        # p = multiprocessing.Process(target=worker,
-        #                             args=(i, data_chunk, categories_dict, args.sentence_threshold, args.prompt_length,
-        #                                   results_queue))
-
-        # for categorize from prompts
-        p = multiprocessing.Process(target=worker_prompt,
-                                    args=(i, data_chunk['prompts'],
-                                          data_chunk['texts'], categories_dict,
-                                          results_queue))
+        if mode == 'text':
+            p = multiprocessing.Process(target=worker,
+                                        args=(i, data_chunk, categories_dict, args.sentence_threshold, args.prompt_length, results_queue))
+        elif mode == 'prompt':
+            p = multiprocessing.Process(target=worker_prompt,
+                                        args=(i, data_chunk['prompts'], data_chunk['texts'], categories_dict, results_queue))
         processes.append(p)
         p.start()
 
-    # Collect results from each process
     results = []
     for _ in range(args.num_processes):
         results.extend(results_queue.get())
 
-    # Wait for all processes to complete
     for p in processes:
         p.join()
 
