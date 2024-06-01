@@ -33,7 +33,12 @@ def main():
         help=
         'The name or path of the model(s) to benchmark (provide multiple models separated by space)'
     )
-# 'age', 'occupation', 'profession', 'religion', 
+    parser.add_argument('--datasets',
+                        type=str,
+                        required=False,
+                        nargs='+',
+                        default=["bold.jsonl", "cnn_dailymail_new.jsonl", "bookcorpus_new.jsonl"],
+                        help='The dataset to benchmark')
     parser.add_argument('--bias_types',
                         type=str,
                         required=False,
@@ -51,7 +56,7 @@ def main():
 
     # first step: generate completions
     for model_ in args.model_name_or_path:
-        for data in data_list:
+        for data in args.datasets:
             for bias_type in args.bias_types:
                 df = pd.read_json(f"data/{data}", lines=True)
                 df = df[df['domain'] == bias_type]
@@ -85,7 +90,7 @@ def main():
 
     # second step: eval completions
     for model_ in args.model_name_or_path:
-        for data in data_list:
+        for data in args.datasets:
             for bias_type in args.bias_types:
                 completions_filename = f"outputs/completions/{model_.replace('/', '-')}_{bias_type}_{data[:data.find('.json')]}_normal.json"
                 if not Path(completions_filename).exists():
