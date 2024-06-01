@@ -4,8 +4,8 @@ conda env create -f env.yaml -n biabenchmark
 conda activate biabenchmark
 
 export OMP_NUM_THREADS=60
-python generation_dataset --dataset=cnn_dailymail
-python generation_dataset --dataset=bookcorpus
+python generation_dataset.py --dataset=cnn_dailymail
+python generation_dataset.py --dataset=bookcorpus
 
 export CUDA_VISIBLE_DEVICES=0
 python generation_benchmark --model_name_or_path=openai-community/gpt2 --datasets=bold.jsonl &
