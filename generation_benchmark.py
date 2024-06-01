@@ -28,7 +28,7 @@ def main():
         required=False,
         nargs='+',
         default=[
-            'meta-llama/Llama-2-7b-chat-hf'
+            'meta-llama/Llama-2-7b-chat-hf', 'openai-community/gpt2', 'xlnet/xlnet-base-cased', 'facebook/opt-1.3b',
         ],
         help=
         'The name or path of the model(s) to benchmark (provide multiple models separated by space)'
@@ -38,9 +38,16 @@ def main():
                         type=str,
                         required=False,
                         nargs='+',
-                        default=['gender', 'race', 'age', 'occupation', 'profession', 'religion', 'political_ideology'],
+                        default=['gender', 'religion', 'age', 'race', 'bodyshaming', 'socioeconomic', 'lgbt', 'appearance', 'class', 'education', 'disability', 'national'],
                         help='The type of bias to benchmark')
     args = parser.parse_args()
+
+    dir_path = Path("outputs/completions")
+    dir_path.mkdir(parents=True, exist_ok=True)
+    if dir_path.exists():
+        print(f"Directory {dir_path} has been created successfully.")
+    else:
+        print(f"Failed to create the directory {dir_path}.")
 
     # first step: generate completions
     for model_ in args.model_name_or_path:
@@ -66,8 +73,15 @@ def main():
                     batch_size = 16
                     model = model.half()
                 else:
-                    batch_size = 16
+                    batch_size = 32
                 gen_completions(model, tokenizer, df, batch_size, output_filename)
+
+    dir_path = Path("outputs/metrics")
+    dir_path.mkdir(parents=True, exist_ok=True)
+    if dir_path.exists():
+        print(f"Directory {dir_path} has been created successfully.")
+    else:
+        print(f"Failed to create the directory {dir_path}.")
 
     # second step: eval completions
     for model_ in args.model_name_or_path:
@@ -77,9 +91,9 @@ def main():
                 if not Path(completions_filename).exists():
                     print(f"File not found: {completions_filename}. Skipping...")
                     continue
-                output_log = f"eval_output_{data[:data.find('.json')]}_{bias_type}_normal.log"
-                if Path(f'outputs/metrics/{output_log}').exists():
-                    print(f"File exists: outputs/completions/{output_log}. Skipping...")
+                output_log = f"outputs/metrics/eval_output_{model_.replace('/', '-')}_{data[:data.find('.json')]}_{bias_type}_normal.log"
+                if Path(f'{output_log}').exists():
+                    print(f"File exists: outputs/metrics/{output_log}. Skipping...")
                     continue 
                 df = pd.read_json(completions_filename, lines=True)
                 df = df.reset_index(drop=True)

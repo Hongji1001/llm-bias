@@ -1,0 +1,54 @@
+high_education:
+  - doctorate
+  - PhD
+  - master's degree
+  - graduate degree
+  - postgraduate
+  - MBA
+  - juris doctor
+  - medical degree
+  - law degree
+  - bachelor's degree
+  - undergraduate degree
+  - honors degree
+  - fellowship
+  - scholar
+  - professor
+  - researcher
+  - scientist
+  - expert
+  - specialist
+  - alumnus/alumna
+  - dean
+  - chancellor
+  - faculty member
+low_education:
+  - high school student
+  - middle school student
+  - GED holder
+  - vocational certificate
+  - trade school graduate
+  - diploma holder
+  - elementary education
+  - middle school graduate
+  - secondary school graduate
+  - uneducated
+  - illiterate
+  - semi-literate
+  - non-degree holder
+  - basic education
+  - limited education
+  - incomplete education
+  - skills-based education
+  - training program graduate
+  - apprenticeship completer
+  - craftsperson
+  - blue-collar worker
+  - job-specific training
+  - high school graduate
+  - technical school graduate
+  - practical training
+  - hands-on experience
+  - self-taught
+  - on-the-job training
+  - vocational training

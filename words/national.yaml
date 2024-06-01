@@ -1,0 +1,86 @@
+developed_countries:
+  - United States
+  - Canada
+  - United Kingdom
+  - Germany
+  - France
+  - Italy
+  - Spain
+  - Japan
+  - South Korea
+  - Australia
+  - New Zealand
+  - Norway
+  - Sweden
+  - Finland
+  - Denmark
+  - Netherlands
+  - Belgium
+  - Switzerland
+  - Austria
+  - Ireland
+  - Luxembourg
+  - Singapore
+  - Israel
+  - Iceland
+developing_countries:
+  - China
+  - India
+  - Brazil
+  - Mexico
+  - Russia
+  - South Africa
+  - Indonesia
+  - Turkey
+  - Argentina
+  - Thailand
+  - Malaysia
+  - Philippines
+  - Vietnam
+  - Egypt
+  - Iran
+  - Colombia
+  - Chile
+  - Peru
+  - Pakistan
+  - Nigeria
+  - Kenya
+  - Morocco
+  - Bangladesh
+  - Sri Lanka
+  - Ghana
+least_developed_countries:
+  - Afghanistan
+  - Haiti
+  - Yemen
+  - Somalia
+  - Sudan
+  - South Sudan
+  - Ethiopia
+  - Eritrea
+  - Chad
+  - Niger
+  - Mali
+  - Burkina Faso
+  - Burundi
+  - Rwanda
+  - Malawi
+  - Mozambique
+  - Uganda
+  - Democratic Republic of the Congo
+  - Central African Republic
+  - Liberia
+  - Sierra Leone
+  - Guinea
+  - Guinea-Bissau
+  - Togo
+  - Madagascar
+  - Nepal
+  - Bhutan
+  - Cambodia
+  - Myanmar
+  - Laos
+  - Zambia
+  - Lesotho
+  - Angola
+  - Tanzania

@@ -61,7 +61,7 @@ def process_text(text, categories_dict, sentence_threshold, prompt_length):
 
 
 def classify_prompt_based_on_category(prompt: str, sentence: str,
-                                      categories_dict: dict, toxicity) -> list:
+                                      categories_dict: dict) -> list:
     """
     Classify the given prompt into categories based on the provided categories dictionary.
 
@@ -94,7 +94,6 @@ def classify_prompt_based_on_category(prompt: str, sentence: str,
                         "category": category,
                         "texts": sentence,
                         "prompts": prompt,
-                        "toxicity": toxicity
                     }
                     break
             if flag > 1:
@@ -106,12 +105,12 @@ def classify_prompt_based_on_category(prompt: str, sentence: str,
 
 def load_dataset_chunks(dataset_name, num_processes):
     """Load the specified dataset and split it into chunks for multiprocessing."""
-    if dataset_name == "jigsaw_toxic":
+    if dataset_name == "jigsaw":
         dataset = load_dataset("SetFit/toxic_conversations")['train']
         data = dataset.to_pandas()
         # data = data[data['label'] == 1]
         data_chunks = np.array_split(data['text'], num_processes)
-        file_name = "jigsaw_.json"
+        file_name = "jigsaw_new.jsonl"
 
     elif dataset_name == "imdb":
         dataset = load_dataset("imdb")
@@ -121,7 +120,7 @@ def load_dataset_chunks(dataset_name, num_processes):
             df['split'] = split
             data = pd.concat([data, df], ignore_index=True)
         data_chunks = np.array_split(data['text'], num_processes)
-        file_name = "imdb_.json"
+        file_name = "imdb_new.jsonl"
 
     elif dataset_name == "wiki_toxic":
         dataset = load_dataset("SetFit/toxic_conversations")
@@ -131,24 +130,30 @@ def load_dataset_chunks(dataset_name, num_processes):
             df['split'] = split
             data = pd.concat([data, df], ignore_index=True)
         data_chunks = np.array_split(data['text'], num_processes)
-        file_name = "wikitoxic_.json"
+        file_name = "wikitoxic_new.jsonl"
 
     elif dataset_name == "cnn_dailymail":
         dataset = load_dataset("ccdv/cnn_dailymail", '3.0.0')['train']
         data = dataset.to_pandas()
         data_chunks = np.array_split(data['article'], num_processes)
-        file_name = "cnn_dailymail_.json"
+        file_name = "cnn_dailymail_new.jsonl"
 
     elif dataset_name == "wikitext":
         dataset = load_dataset("wikitext", 'wikitext-103-raw-v1')['train']
         data = dataset.to_pandas()
         data_chunks = np.array_split(data['text'], num_processes)
-        file_name = "wikitext_.json"
+        file_name = "wikitext_new.jsonl"
+        
+    elif dataset_name == "bookcorpus":
+        dataset = load_dataset('bookcorpus')['train']
+        data = dataset.to_pandas()
+        data_chunks = np.array_split(data['text'], num_processes)
+        file_name = "bookcorpus_new.jsonl"
 
     elif dataset_name == "realtoxic":
         data = load_realtoxic()
         data_chunks = np.array_split(data, num_processes)
-        file_name = "realtoxic_.json"
+        file_name = "realtoxic_new.jsonl"
 
     else:
         raise ValueError("Unknown dataset")
@@ -181,7 +186,7 @@ def post_process(data: pd.DataFrame):
 
 
 def calculate_scores(df, toxicity_evaluator, regard_evaluator):
-    input_texts = df['texts'].tolist()
+    input_texts = df['prompts'].tolist()
     toxicity_results = toxicity_evaluator.compute(predictions=input_texts)
     toxicity_scores = toxicity_results["toxicity"]
 
@@ -198,7 +203,7 @@ def calculate_scores(df, toxicity_evaluator, regard_evaluator):
     return df
 
 
-def select_top_2k_per_category(df):
+def select_top_2k_per_category(df, file_path):
     toxicity_evaluator = evaluate.load("toxicity", module_type="measurement")
     regard_evaluator = evaluate.load("regard", module_type="measurement")
 
@@ -206,11 +211,13 @@ def select_top_2k_per_category(df):
 
     domain_category_counts = df.groupby(
         'domain')['category'].nunique().reset_index(name='unique_categories')
-    domain_category_counts[
-        'per_category_quota'] = 2000 // domain_category_counts[
-            'unique_categories']
+    domain_category_counts['per_category_quota'] = 1000 
+    # 2000 // domain_category_counts['unique_categories']
     df = df.merge(domain_category_counts[['domain', 'per_category_quota']],
                   on='domain')
+
+    print(f"Intermediate results are stored in {file_path}")
+    df.to_json(file_path, orient='records', lines=True)
 
     def select_by_quota(group_df):
         quota = int(group_df['per_category_quota'].iloc[0])
@@ -221,6 +228,30 @@ def select_top_2k_per_category(df):
 
     return top_2k_per_domain
 
+def resample_large_domains(dataframe, threshold=60000, random_seed=42):
+    """
+    """
+    domain_counts = dataframe['domain'].value_counts()
+    large_domains = domain_counts[domain_counts > threshold].index
+    filtered_df = dataframe[dataframe['domain'].isin(large_domains)]
+    
+    def resample_domain_group(group, target_size, seed):
+        category_counts = group['category'].value_counts(normalize=True)
+        resampled_group = group.groupby('category', group_keys=False).apply(
+            lambda x: x.sample(n=int(target_size * category_counts.loc[x.name]), random_state=seed, replace=True)
+        )
+        return resampled_group
+    
+    resampled_df = filtered_df.groupby('domain', group_keys=False).apply(
+        lambda x: resample_domain_group(x, threshold, random_seed)
+    )
+    resampled_df = resampled_df.reset_index(drop=True)
+    
+    cleaned_df = dataframe[~dataframe['domain'].isin(large_domains)]
+    
+    final_df = pd.concat([cleaned_df, resampled_df], ignore_index=True)
+    
+    return final_df
 
 def main():
     parser = argparse.ArgumentParser(
@@ -235,15 +266,15 @@ def main():
                         help='Prompt length in terms of number of words')
     parser.add_argument('--num_processes',
                         type=int,
-                        default=20,
+                        default=60,
                         help='Number of processes to use')
     parser.add_argument('--dataset',
                         type=str,
-                        default='realtoxic',
+                        default='bookcorpus',
                         help='Name of the dataset to use')
     parser.add_argument('--mode',
                         type=str,
-                        default='prompt',
+                        default='text',
                         choices=['text', 'prompt'],
                         help='Mode of classification: text or prompt')
     args = parser.parse_args()
@@ -255,17 +286,39 @@ def main():
     religion_dict = load_categories(wordlists_dir / "religion.yaml")
     age_dict = load_categories(wordlists_dir / "age.yaml")
     race_dict = load_categories(wordlists_dir / "race.yaml")
+    bodyshaming_dict = load_categories(wordlists_dir / "bodyshaming.yaml")
+    socioeconomic_dict = load_categories(wordlists_dir / "socioeconomic.yaml")
+    lgbt_dict = load_categories(wordlists_dir / "lgbt.yaml")
+    appearance_dict = load_categories(wordlists_dir / "appearance.yaml")
+    class_dict = load_categories(wordlists_dir / "class.yaml")
+    education_dict = load_categories(wordlists_dir / "education.yaml")
+    disability_dict = load_categories(wordlists_dir / "disability.yaml")
+    national_dict = load_categories(wordlists_dir / "national.yaml")
 
     categories_dict = {
         'gender': gender_dict,
-        'occupation': occupation_dict,
+        # 'occupation': occupation_dict,
         'religion': religion_dict,
         'age': age_dict,
-        'race': race_dict
+        'race': race_dict,
+        'bodyshaming': bodyshaming_dict,
+        'socioeconomic': socioeconomic_dict,
+        'lgbt': lgbt_dict,
+        'appearance': appearance_dict,
+        'class': class_dict,
+        'education': education_dict,
+        'disability': disability_dict,
+        'national': national_dict
     }
 
     data_chunks, file_name = load_dataset_chunks(args.dataset,
                                                  args.num_processes)
+    file_path = script_dir / 'data' / file_name
+    file_path.parent.mkdir(parents=True, exist_ok=True)
+    if file_path.parent.exists():
+        print(f"File {file_path}'s parent dir has been created successfully.")
+    else:
+        print(f"Failed to create the parent dir of file {file_path}.")
 
     manager = multiprocessing.Manager()
     results_queue = manager.Queue()
@@ -292,30 +345,19 @@ def main():
     for p in processes:
         p.join()
 
+    
     results_df = pd.DataFrame(results)
     print(results_df.groupby(['domain']).size())
     print(results_df.groupby(['domain', 'category']).size())
-    if args.mode == "text":
-        results_df = select_top_2k_per_category(results_df)
-        
-    gender_df = results_df[results_df['domain'] == 'gender']
-
-    # 分别筛选出 category 为 male 和 female 的行，并取出 toxicity 列最大的 1000 条记录
-    top_1000_female = gender_df[gender_df['category'] == 'female'].nlargest(1000, 'toxicity')
-    top_1000_male = gender_df[gender_df['category'] == 'male'].nlargest(1000, 'toxicity')
-
-    filtered_gender_df = pd.concat([top_1000_female, top_1000_male])
-
-    # 过滤出 domain 不为 gender 的原始数据
-    non_gender_df = results_df[results_df['domain'] != 'gender']
-
-    # 合并筛选结果和非 gender 数据
-    results_df = pd.concat([filtered_gender_df, non_gender_df])
+    results_df = resample_large_domains(results_df)
     print(results_df.groupby(['domain']).size())
     print(results_df.groupby(['domain', 'category']).size())
-    print(results_df)
-
-    file_path = script_dir / 'data' / file_name
+    
+    if args.mode == "text":
+        results_df = select_top_2k_per_category(results_df, file_path)
+    
+    print(results_df.groupby(['domain']).size())
+    print(results_df.groupby(['domain', 'category']).size())
     results_df.to_json(file_path, orient='records', lines=True)
     print(f"Results saved to {file_path}")
 

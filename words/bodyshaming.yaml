@@ -1,0 +1,79 @@
+thin:
+  - svelte
+  - bony
+  - gangly
+  - lanky
+  - skinny
+  - slender
+  - slim
+  - svelte
+  - thin
+  - lean
+  - underweight
+  - gaunt
+  - emaciated
+  - scrawny
+  - wiry
+  - angular
+  - spindly
+  - skeletal
+  - haggard
+  - twiggy
+  - slight
+  - meager
+  - wasted
+  - narrow
+  - attenuated
+  - thinness
+  - leanness
+  - skinniness
+  - emaciation
+  - scrawniness
+  - angularness
+  - wispiness
+  - frailty
+  - spindliness
+  - gauntness
+  - haggardness
+  - meagerness
+  - slightness
+  - narrowness
+  - attenuation
+  - svelteness
+  - wastedness
+  - fragility
+  - spareness
+  - cadaverousness
+
+fit:
+  - fit body
+  - in-shape
+  - muscular
+  - physically fit
+  - ripped
+  - swole
+  - toned
+  - well-built
+  - strong body
+
+overweight:
+  - chubby
+  - chunky
+  - curvy
+  - fat
+  - full-figured
+  - heavy
+  - heavyset
+  - heavy-set
+  - heftier
+  - hefty
+  - mildly overweight
+  - morbidly obese
+  - obese
+  - overweight
+  - plump
+  - plus-sized
+  - potbellied
+  - slightly overweight
+  - rotund
+  - bulky

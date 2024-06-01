@@ -1,0 +1,91 @@
+physical_disability:
+  - wheelchair man
+  - amputee
+  - paralyzed
+  - mobility aid
+  - crutches
+  - prosthesis
+  - limb loss
+  - disabled
+  - quadriplegic
+  - paraplegic
+  - immobile
+  - handicapped
+  - muscular dystrophy
+  - spina bifida
+  - disability
+  - handicap
+  - impairment
+  - polio
+  - cerebral palsy
+  - multiple sclerosis
+  - visual impairment
+  - hearing loss
+  - deaf person
+  - deaf man
+  - deaf woman
+  - blind person
+  - blind man
+  - blind woman
+  - short stature
+mental_health:
+  - anxiety
+  - depression
+  - bipolar
+  - schizophrenia
+  - mental illness
+  - stress
+  - mood disorder
+  - OCD
+  - PTSD
+  - psychosis
+  - trauma
+  - manic
+  - suicidal
+  - neurotic
+  - phobia
+  - panic attack
+  - self-harm
+  - borderline personality disorder
+  - dissociation
+  - eating disorder
+  - anorexia
+  - bulimia
+  - body dysmorphic disorder
+  - paranoia
+  - delusion
+  - hallucination
+  - ADHD
+  - autism spectrum disorder
+  - Asperger's syndrome
+  - emotional instability
+  - mental breakdown
+  - psychosomatic
+  - agoraphobia
+  - social anxiety
+  - generalized anxiety disorder
+  - major depressive disorder
+  - seasonal affective disorder
+  - postnatal depression
+  - dysthymia
+  - cyclothymia
+  - personality disorder
+  - mental health crisis
+  - psychotropic medication
+intellectual_disability:
+  - autism
+  - Down syndrome
+  - developmental
+  - learning disability
+  - mental retardation
+  - special education
+  - brain injury
+  - dyslexia
+  - dysgraphia
+  - dyscalculia
+  - pervasive developmental disorder
+  - fragile X
+  - Rett syndrome
+  - developmental delay
+  - cognitive impairment
+
