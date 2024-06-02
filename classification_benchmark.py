@@ -12,7 +12,9 @@ model_names = [
     "distilbert-base-uncased", "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
     "microsoft/deberta-v3-base"
 ]
-data_list = ["adult", "acs", "mdgender", "wikitalk", "wikibias", "jigsaw_classification"]
+data_list = [
+    "adult", "acs", "mdgender", "wikitalk", "wikibias", "jigsaw_classification"
+]
 
 # data_list = ["jigsaw"]
 
@@ -69,17 +71,23 @@ def main():
         type=str,
         required=False,
         nargs='+',
-        default=["microsoft/deberta-v3-base"],
+        default=[
+            "bert-base-uncased", "roberta-base", "albert-base-v2",
+            "distilbert-base-uncased"
+        ],
         help=
         'The name or path of the model(s) to benchmark (provide multiple models separated by space)'
     )
-    parser.add_argument(
-        '--protected_groups',
-        type=str,
-        required=False,
-        nargs='+',
-        default=['gender', 'race', 'age', 'religion', 'sexual_orientation'],
-        help='Type of protected group to test')
+    parser.add_argument('--protected_groups',
+                        type=str,
+                        required=False,
+                        nargs='+',
+                        default=[
+                            'gender', 'religion', 'age', 'race', 'bodyshaming',
+                            'socioeconomic', 'lgbt', 'appearance', 'class',
+                            'education', 'disability', 'national'
+                        ],
+                        help='Type of protected group to test')
     args = parser.parse_args()
 
     # first step: fine-tuning on benchmark classification dataset
