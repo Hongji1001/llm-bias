@@ -11,4 +11,4 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-CUDA_VISIBLE_DEVICES=0 python generation_benchmark.py --model_name_or_path=meta-llama/Llama-2-7b-chat-hf --datasets=bookcorpus_new.jsonl --bias_types="lgbt, appearance, class, education, disability, national"
+CUDA_VISIBLE_DEVICES=0 python generation_benchmark.py --model_name_or_path=meta-llama/Llama-2-7b-chat-hf --datasets=bookcorpus_new.jsonl --bias_types="lgbt appearance class education disability national"
