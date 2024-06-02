@@ -11,4 +11,4 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-CUDA_VISIBLE_DEVICES=3 python generation_benchmark --model_name_or_path=facebook/opt-1.3b --datasets=bookcorpus_new.jsonl
+CUDA_VISIBLE_DEVICES=3 python generation_benchmark.py --model_name_or_path=facebook/opt-1.3b --datasets=bookcorpus_new.jsonl

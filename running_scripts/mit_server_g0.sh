@@ -2,7 +2,7 @@
  # @Author: pengjie pengjieb@mail.ustc.edu.cn
  # @Date: 2024-06-02 11:51:34
  # @LastEditors: pengjie pengjieb@mail.ustc.edu.cn
- # @LastEditTime: 2024-06-02 11:59:52
+ # @LastEditTime: 2024-06-02 12:13:02
  # @FilePath: /llm-bias/running_scripts/mit_server_g0.sh
  # @Description: 
  # 
@@ -11,4 +11,4 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-CUDA_VISIBLE_DEVICES=0 python generation_benchmark --model_name_or_path=meta-llama/Llama-2-7b-chat-hf --datasets=bookcorpus_new.jsonl --bias_types=lgbt, appearance, class, education, disability, national
+CUDA_VISIBLE_DEVICES=0 python generation_benchmark.py --model_name_or_path=meta-llama/Llama-2-7b-chat-hf --datasets=bookcorpus_new.jsonl --bias_types=lgbt, appearance, class, education, disability, national
