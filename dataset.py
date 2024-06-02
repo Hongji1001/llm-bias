@@ -371,8 +371,11 @@ def load_jigsaw(protected_group):
     return processed_df
 
 def load_equibench(protected_group):
-    all_data = pd.read_csv('data/equibench.csv')
+    all_data = pd.read_json('data/equibench.jsonl', lines=True)
     domain_data = all_data[all_data['domain'] == protected_group]
+    train_idx, test_idx = train_test_split(domain_data.index, test_size=0.2, random_state=42)
+    domain_data['split'] = 'test'
+    domain_data.loc[train_idx, 'split'] = 'train'
     print("loading equibench")
     print(domain_data)
     return domain_data
