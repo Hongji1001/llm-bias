@@ -97,7 +97,7 @@ def main():
                 tokenizer = AutoTokenizer.from_pretrained(model_)
                 train_dataset = load_classification_dataset(
                     data, protected_group)
-                if train_dataset is None:
+                if len(train_dataset) == 0:
                     continue
                 print(train_dataset)
                 train_dataset = train_dataset[train_dataset['split'] ==
