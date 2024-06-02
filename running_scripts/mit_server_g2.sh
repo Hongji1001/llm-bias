@@ -11,4 +11,5 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-CUDA_VISIBLE_DEVICES=2 python generation_benchmark.py --model_name_or_path=xlnet/xlnet-base-cased --datasets=bookcorpus_new.jsonl
+
+CUDA_VISIBLE_DEVICES=2 python generation_benchmark.py --model_name_or_path xlnet/xlnet-base-cased --datasets bookcorpus_new.jsonl

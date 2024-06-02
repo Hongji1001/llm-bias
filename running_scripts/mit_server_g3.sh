@@ -2,7 +2,7 @@
  # @Author: pengjie pengjieb@mail.ustc.edu.cn
  # @Date: 2024-06-02 11:51:34
  # @LastEditors: pengjie pengjieb@mail.ustc.edu.cn
- # @LastEditTime: 2024-06-02 12:00:28
+ # @LastEditTime: 2024-06-02 12:23:18
  # @FilePath: /llm-bias/running_scripts/mit_server_g3.sh
  # @Description: 
  # 
@@ -11,4 +11,5 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-CUDA_VISIBLE_DEVICES=3 python generation_benchmark.py --model_name_or_path=facebook/opt-1.3b --datasets=bookcorpus_new.jsonl
+
+CUDA_VISIBLE_DEVICES=3 python generation_benchmark.py --model_name_or_path facebook/opt-1.3b --datasets bookcorpus_new.jsonl
