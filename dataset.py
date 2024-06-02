@@ -370,6 +370,13 @@ def load_jigsaw(protected_group):
     print(processed_df)
     return processed_df
 
+def load_equibench(protected_group):
+    all_data = pd.read_csv('data/equibench.csv')
+    domain_data = all_data[all_data['domain'] == protected_group]
+    print("loading equibench")
+    print(domain_data)
+    return domain_data
+
 
 def load_classification_dataset(dataset, protected_group):
     if dataset == "adult":
@@ -386,6 +393,8 @@ def load_classification_dataset(dataset, protected_group):
         return load_wikitalk(protected_group)
     elif dataset == "jigsaw":
         return load_jigsaw(protected_group)
+    elif dataset == "equibench":
+        return load_equibench(protected_group)
     else:
         raise NameError(dataset)
     

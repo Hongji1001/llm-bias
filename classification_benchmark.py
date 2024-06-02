@@ -13,7 +13,7 @@ model_names = [
     "microsoft/deberta-v3-base"
 ]
 data_list = [
-    "adult", "acs", "mdgender", "wikitalk", "wikibias", "jigsaw_classification"
+    "equibench"
 ]
 
 # data_list = ["jigsaw"]
