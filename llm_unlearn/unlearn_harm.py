@@ -99,7 +99,7 @@ def main(args) -> None:
     model.train()
 
     # Reference model for computing KL.
-    pretrained_model = AutoModelForCausalLM.from_pretrained(args.model_name)
+    pretrained_model = AutoModelForCausalLM.from_pretrained(args.model_name).half()
     pretrained_model.to(device)
 
     # Start unlearning.
