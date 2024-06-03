@@ -182,7 +182,7 @@ def create_truthfulqa_dataloader(tokenizer, batch_size=4):
 
     data = {"input_ids": [], "attention_mask": []}
     for question, good_answer in zip(questions, good_answers):
-        text = f"### Prompt: {question}\n ### Continuation: {good_answer}"
+        text = f"### Question: {question}\n ### Answer: {good_answer}"
         tokenized = tokenizer(text, truncation=True, padding="max_length")
         data["input_ids"].append(tokenized["input_ids"])
         data["attention_mask"].append(tokenized["attention_mask"])
