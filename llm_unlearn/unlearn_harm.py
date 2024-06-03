@@ -38,7 +38,7 @@ random.seed(8888)
 def main(args) -> None:
     accelerator = Accelerator()
     device = accelerator.device
-    model = AutoModelForCausalLM.from_pretrained(args.model_name).half()
+    model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16)
     # If use LoRA.
     if args.use_lora:
         peft_config = AdaLoraConfig(
@@ -99,7 +99,7 @@ def main(args) -> None:
     model.train()
 
     # Reference model for computing KL.
-    pretrained_model = AutoModelForCausalLM.from_pretrained(args.model_name).half()
+    pretrained_model = AutoModelForCausalLM.from_pretrained(args.model_name, torch_dtype=torch.float16)
     pretrained_model.to(device)
 
     # Start unlearning.
