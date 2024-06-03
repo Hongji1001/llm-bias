@@ -21,6 +21,7 @@ from datasets import load_dataset, Dataset
 from peft import AdaLoraConfig, TaskType, get_peft_model
 from torch.optim import AdamW
 from transformers import AutoModelForCausalLM, AutoTokenizer, get_scheduler
+from torch.cuda.amp import autocast, GradScaler
 from utils import (
     compute_kl,
     create_pku_dataloader_from_dataset,
@@ -98,8 +99,8 @@ def main(args) -> None:
         model, optimizer, train_bad_loader, train_normal_loader, lr_scheduler
     )
 
+    scaler = GradScaler()
     model.train()
-
     # Reference model for computing KL.
     pretrained_model = AutoModelForCausalLM.from_pretrained(args.model_name)
     pretrained_model.to(device)
@@ -111,41 +112,39 @@ def main(args) -> None:
     # Stop if bad loss is big enough or reaching max step.
     while bad_loss < args.max_bad_loss and idx < args.max_unlearn_steps:
         for bad_batch, normal_batch in zip(train_bad_loader, train_normal_loader):
-            ############ GA on answer only. ############
-            bad_loss = get_answer_loss("ga", bad_batch, model, device=device)
+            with autocast():
+                ############ GA on answer only. ############
+                bad_loss = get_answer_loss("ga", bad_batch, model, device=device)
 
-            ############ Random mismatch. ############
-            random_loss = get_rand_ans_loss(
-                bad_batch,
-                tokenizer,
-                normal_ans,
-                model,
-                K=5,
-                device=device,
-            )
+                ############ Random mismatch. ############
+                random_loss = get_rand_ans_loss(
+                    bad_batch,
+                    tokenizer,
+                    normal_ans,
+                    model,
+                    K=5,
+                    device=device,
+                )
 
-            ############ KL on normal samples. ############
-            normal_loss = compute_kl(pretrained_model, model, normal_batch, device)
+                ############ KL on normal samples. ############
+                normal_loss = compute_kl(pretrained_model, model, normal_batch, device)
 
-            # Final loss = bad loss + random smoothing + normal loss.
-            loss = (
-                args.bad_weight * bad_loss
-                + args.random_weight * random_loss
-                + args.normal_weight * normal_loss
-            )
+                # Final loss = bad loss + random smoothing + normal loss.
+                loss = (args.bad_weight * bad_loss +
+                        args.random_weight * random_loss +
+                        args.normal_weight * normal_loss)
 
-            # Backprop.
-            accelerator.backward(loss)
-            optimizer.step()
+            # Backprop with mixed precision
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
             lr_scheduler.step()
             optimizer.zero_grad()
 
             # Print.
-            stats = (
-                f"batch: {idx}, "
-                f"bad_loss: {-bad_loss:.2f}, "
-                f"current_div_loss: {normal_loss:.2f}, "
-            )
+            stats = (f"batch: {idx}, "
+                    f"bad_loss: {-bad_loss:.2f}, "
+                    f"current_div_loss: {normal_loss:.2f}, ")
             logging.info(stats)
             print(stats)
             idx += 1
@@ -153,11 +152,11 @@ def main(args) -> None:
             # Save model.
             if idx % args.save_every == 0:
                 model.save_pretrained(args.model_save_dir, from_pt=True)
-    end_time = time.time()
-    logging.info("Total time: %d sec" % (end_time - start_time))
+        end_time = time.time()
+        logging.info("Total time: %d sec" % (end_time - start_time))
 
-    if args.use_lora:
-        model = model.merge_and_unload()
+        if args.use_lora:
+            model = model.merge_and_unload()
 
     # Save final model.
     model.save_pretrained(args.model_save_dir, from_pt=True)
