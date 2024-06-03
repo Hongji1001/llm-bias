@@ -62,12 +62,15 @@ def main(args) -> None:
     # )
 
     # Load bias benchmark dataset
-    train_dataset = pd.read_json(args.datapath, lines=True)
-    # train_dataset = train_dataset[train_dataset["domain"] == 'gender']
-    train_dataset = Dataset.from_pandas(train_dataset)
+    if args.datapath is None:
+        train_dataset = load_dataset("PKU-Alignment/PKU-SafeRLHF")['train']
+    else:
+        train_dataset = pd.read_json(args.datapath, lines=True)
+        # train_dataset = train_dataset[train_dataset["domain"] == 'gender']
+        train_dataset = Dataset.from_pandas(train_dataset)
     train_bad_loader = create_bias_benchmark_from_dataset(tokenizer,
-                                       train_dataset,
-                                       batch_size=args.batch_size)
+                                    train_dataset,
+                                    batch_size=args.batch_size)
 
     # Get normal data.
     train_normal_loader, _, _ = create_truthfulqa_dataloader(
