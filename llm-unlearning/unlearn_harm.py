@@ -40,7 +40,7 @@ random.seed(8888)
 def main(args) -> None:
     accelerator = Accelerator()
     device = accelerator.device
-    model = AutoModelForCausalLM.from_pretrained(args.model_name).half()
+    model = AutoModelForCausalLM.from_pretrained(args.model_name)
     # If use LoRA.
     if args.use_lora:
         peft_config = AdaLoraConfig(
