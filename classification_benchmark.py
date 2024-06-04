@@ -1,4 +1,8 @@
 import argparse
+import random
+
+import numpy as np
+import torch
 from util import get_newest_folder
 from dataset import MLMClassificationDataset, load_classification_dataset
 from train_mlm import train_mlm_for_classification
@@ -6,6 +10,7 @@ from run_mlm import test_mlm_for_classification
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
 import pandas as pd
 from pathlib import Path
+from transformers import set_seed
 
 model_names = [
     "bert-base-uncased", "roberta-base", "albert-base-v2",
@@ -75,6 +80,13 @@ def print_decoded_texts(dataset, tokenizer):
         decoded_text = tokenizer.decode(input_ids, skip_special_tokens=True)
         print(f"Decoded text {i+1}: {decoded_text}")
 
+def set_random_seed(seed_value):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    torch.cuda.manual_seed_all(seed_value)
+    set_seed(seed_value)
+
 def main():
     parser = argparse.ArgumentParser(
         description='Script to process model and dataset')
@@ -100,7 +112,7 @@ def main():
                         ],
                         help='Type of protected group to test')
     args = parser.parse_args()
-
+    set_random_seed(0)
     # first step: fine-tuning on benchmark classification dataset
     for model_ in args.model_name_or_path:
         for data in data_list:
