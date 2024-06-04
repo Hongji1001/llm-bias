@@ -12,8 +12,9 @@ model_names = [
     "distilbert-base-uncased", "MoritzLaurer/deberta-v3-large-zeroshot-v2.0",
     "microsoft/deberta-v3-base"
 ]
+#     "equibench", "jigsaw", 
 data_list = [
-    "equibench"
+"adult", "wikitalk"
 ]
 
 # data_list = ["jigsaw"]
@@ -62,6 +63,17 @@ def test():
             test_mlm_for_classification(model, tokenizer, train_dataset,
                                         filename)
 
+def sample_group(group, n=15):
+    return group if len(group) < n else group.sample(n, random_state=42)
+
+
+def print_decoded_texts(dataset, tokenizer):
+    for i in range(len(dataset)):
+        item = dataset[i]
+        input_ids = item['input_ids']
+        print(input_ids)
+        decoded_text = tokenizer.decode(input_ids, skip_special_tokens=True)
+        print(f"Decoded text {i+1}: {decoded_text}")
 
 def main():
     parser = argparse.ArgumentParser(
@@ -72,8 +84,7 @@ def main():
         required=False,
         nargs='+',
         default=[
-            "bert-base-uncased", "roberta-base", "albert-base-v2",
-            "distilbert-base-uncased"
+            "bert-base-uncased",
         ],
         help=
         'The name or path of the model(s) to benchmark (provide multiple models separated by space)'
@@ -83,9 +94,9 @@ def main():
                         required=False,
                         nargs='+',
                         default=[
-                            'gender', 'religion', 'age', 'race', 'bodyshaming',
-                            'socioeconomic', 'lgbt', 'appearance', 'class',
-                            'education', 'disability', 'national'
+                            'gender', 'age', 'race', 'lgbt', 'religion',
+                            'socioeconomic', 'appearance', 'class',
+                            'education', 'disability', 'national', 'religion'
                         ],
                         help='Type of protected group to test')
     args = parser.parse_args()
@@ -95,36 +106,33 @@ def main():
         for data in data_list:
             for protected_group in args.protected_groups:
                 tokenizer = AutoTokenizer.from_pretrained(model_)
-                train_dataset = load_classification_dataset(
+                raw_dataset = load_classification_dataset(
                     data, protected_group)
-                if len(train_dataset) == 0:
+                if raw_dataset is None:
                     continue
-                print(train_dataset)
-                train_dataset = train_dataset[train_dataset['split'] ==
+                train_dataset = raw_dataset[raw_dataset['split'] ==
                                               'train'].reset_index(drop=True)
+                validation_dataset = raw_dataset[raw_dataset['split'] ==
+                                              'test'].reset_index(drop=True)
+                print(train_dataset.groupby(['label', 'sensitive']).size())
+                train_dataset = train_dataset.groupby(['label', 'sensitive']).apply(lambda x: sample_group(x, 1)).reset_index(drop=True)
+                print(train_dataset)
                 num_labels = train_dataset['label'].nunique()
                 train_dataset = MLMClassificationDataset(
                     train_dataset['text'], train_dataset['label'], tokenizer)
+                print(len(train_dataset), "!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                validation_dataset = MLMClassificationDataset(
+                    validation_dataset['text'], validation_dataset['label'], tokenizer)
                 model = AutoModelForSequenceClassification.from_pretrained(
                     model_, num_labels=num_labels)
                 train_mlm_for_classification(
-                    model, tokenizer, train_dataset,
+                    model, tokenizer, train_dataset, validation_dataset,
                     f"checkpoint/{model_.replace('/', '-')}_{data}_{protected_group}_normal"
                 )
-
-    # second step: eval result of classification
-    for model_ in args.model_name_or_path:
-        for data in data_list:
-            for protected_group in args.protected_groups:
-                tokenizer = AutoTokenizer.from_pretrained(model_)
-                train_dataset = load_classification_dataset(
+                
+                
+                test_dataset = load_classification_dataset(
                     data, protected_group)
-                if train_dataset is None:
-                    continue
-                print(train_dataset)
-                train_dataset = train_dataset[train_dataset['split'] ==
-                                              'test'].reset_index(drop=True)
-                num_labels = train_dataset['label'].nunique()
                 model = AutoModelForSequenceClassification.from_pretrained(
                     get_newest_folder(
                         f"checkpoint/{model_.replace('/', '-')}_{data}_{protected_group}_normal"
@@ -135,8 +143,35 @@ def main():
                 output_file_path = output_file_path / 'metrics'
                 output_file_path.mkdir(parents=True, exist_ok=True)
                 filename = output_file_path / f"eval_output_{data}_{protected_group}_{model_.replace('/', '-')}.log"
-                test_mlm_for_classification(model, tokenizer, train_dataset,
+                print(test_dataset)
+                test_mlm_for_classification(model, tokenizer, test_dataset,
                                             filename)
+
+    # second step: eval result of classification
+    # for model_ in args.model_name_or_path:
+    #     for data in data_list:
+    #         for protected_group in args.protected_groups:
+    #             tokenizer = AutoTokenizer.from_pretrained(model_)
+    #             train_dataset = load_classification_dataset(
+    #                 data, protected_group)
+    #             if train_dataset is None:
+    #                 continue
+    #             print(train_dataset)
+    #             # train_dataset = train_dataset[train_dataset['split'] ==
+    #             #                               'test'].reset_index(drop=True)
+    #             num_labels = train_dataset['label'].nunique()
+    #             model = AutoModelForSequenceClassification.from_pretrained(model_,
+    #                 # get_newest_folder(
+    #                 #     f"checkpoint/{model_.replace('/', '-')}_{data}_{protected_group}_normal"
+    #                 # ),
+    #                 num_labels=num_labels)
+    #             output_file_path = Path(__file__).resolve().parent / 'outputs'
+    #             output_file_path.mkdir(parents=True, exist_ok=True)
+    #             output_file_path = output_file_path / 'metrics'
+    #             output_file_path.mkdir(parents=True, exist_ok=True)
+    #             filename = output_file_path / f"eval_output_{data}_{protected_group}_{model_.replace('/', '-')}.log"
+    #             test_mlm_for_classification(model, tokenizer, train_dataset,
+    #                                         filename)
 
 
 if __name__ == '__main__':

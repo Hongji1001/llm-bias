@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 import numpy as np
 import pandas as pd
-from sklearn.metrics import classification_report
+from sklearn.metrics import classification_report, accuracy_score
 import torch
 from tqdm import tqdm
 from transformers import AutoModelForSequenceClassification, AutoTokenizer
@@ -47,8 +47,16 @@ def test_mlm_for_classification(model, tokenizer, dataset, outputpath):
     # print(target_hat_list)
     # print(np.array(true_labels))
     # print(sensitive_list)
+    print()
     report = classification_report(true_labels, predictions)    # Adjust class names as needed
     print(report)
+    accuracy_numpy = np.mean(np.array(true_labels) == np.array(predictions))
+    print(f"Accuracy (NumPy): {accuracy_numpy * 100:.6f}%")
+
+    # Scikit-Learn method
+    accuracy_sklearn = accuracy_score(true_labels, predictions)
+    print(f"Accuracy (Scikit-Learn): {accuracy_sklearn * 100:.6f}%")
+
     eod_result = eod(target_hat_list, np.array(true_labels), np.array(sensitive_list), 0.5)
     kld_result = kld(target_hat_list, np.array(sensitive_list))
     print("kld: ", kld_result)

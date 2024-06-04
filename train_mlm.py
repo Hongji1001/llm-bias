@@ -6,17 +6,17 @@ from pathlib import Path
 from dataset import MLMClassificationDataset, load_classification_dataset
 
 
-def train_mlm_for_classification(model, tokenizer, train_dataset, output_filename):
+def train_mlm_for_classification(model, tokenizer, train_dataset, validation_dataset, output_filename):
     training_args = TrainingArguments(
         output_dir=output_filename,
-        num_train_epochs=1,
-        per_device_train_batch_size=16,
-        warmup_steps=500,
+        num_train_epochs=20,
+        per_device_train_batch_size=8,
+        warmup_steps=5,
         learning_rate=5e-5,
         weight_decay=0.01,
-        logging_dir='logs',
-        logging_steps=100,
-        evaluation_strategy='no',
+        logging_dir='./logs',
+        logging_steps=1,
+        eval_strategy='epoch',
         save_strategy='epoch',
         save_total_limit=1
     )
@@ -24,6 +24,7 @@ def train_mlm_for_classification(model, tokenizer, train_dataset, output_filenam
         model=model,
         args=training_args,
         train_dataset=train_dataset,
+        eval_dataset=validation_dataset,
         tokenizer=tokenizer,
     )
     trainer.train()
