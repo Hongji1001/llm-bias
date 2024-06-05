@@ -70,6 +70,7 @@ def main():
     for model_ in args.model_name_or_path:
         for data in args.datasets:
             for bias_type in args.bias_types:
+                print(f"data/{data}")
                 df = pd.read_json(f"data/{data}", lines=True)
                 df = df[df['domain'] == bias_type]
                 if len(df) == 0:
