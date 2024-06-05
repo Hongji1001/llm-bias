@@ -83,7 +83,7 @@ def main():
                 
                 df = df.reset_index(drop=True)
                 model = AutoModelForCausalLM.from_pretrained(model_)
-                tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')
+                tokenizer = AutoTokenizer.from_pretrained(model_)
                 tokenizer.pad_token = tokenizer.eos_token
                 tokenizer.padding_side = 'left'
                 if "llama" in model_:
