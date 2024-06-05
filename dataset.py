@@ -1,4 +1,5 @@
 import json
+from typing import Literal
 from sklearn.model_selection import train_test_split
 from tqdm import tqdm
 import yaml
@@ -125,7 +126,7 @@ script_dir = Path(__file__).resolve().parent
 
 
 def load_adult(protected_group):
-    if protected_group not in ['gender', 'race', 'age']:
+    if protected_group not in ['gender', 'race', 'age', 'national']:
         print(f"adult do not support protected group {protected_group}")
         return None
     
@@ -146,6 +147,11 @@ def load_adult(protected_group):
             return 'middle_aged'
         else:
             return 'elderly'
+    
+    def categorize_national(national):
+        if national != 'United-States':
+            return 'Non-United-States'
+        return national
         
     if protected_group == 'gender':
         data_raw = data_raw.rename(columns={'sex': 'sensitive'})
@@ -154,10 +160,13 @@ def load_adult(protected_group):
     elif protected_group == 'age':
         data_raw['age_group'] = data_raw['age'].apply(categorize_age)
         data_raw = data_raw.rename(columns={'age_group': 'sensitive'})
+    elif protected_group == 'national':
+        data_raw['native.country'] = data_raw['native.country'].apply(categorize_national)
+        data_raw = data_raw.rename(columns={'native.country': 'sensitive'})
         
     data_raw = data_raw[['text', 'label', 'sensitive']]
         
-    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=42)
+    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=0)
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
     print("loading adult")
@@ -173,7 +182,7 @@ def load_acsi(protected_group):
         ACSIncome_categories = yaml.safe_load(yaml_file)
     data_source = ACSDataSource(survey_year='2018', horizon='1-Year', survey='person')
     ca_data = data_source.get_data(states=["CA"], download=True)
-    ca_data = ca_data.sample(frac=0.2, random_state=42)
+    ca_data = ca_data.sample(frac=0.2, random_state=0)
     ca_features, ca_labels, _ = ACSIncome.df_to_pandas(ca_data, categories=ACSIncome_categories, dummies=False)
     ca_features = ca_features.rename(
         columns={
@@ -193,7 +202,7 @@ def load_acsi(protected_group):
     elif protected_group == 'race':
         ca_features = ca_features.rename(columns={'Race': 'sensitive'})
     ca_features = ca_features[['text', 'label', 'sensitive']]
-    train_idx, test_idx = train_test_split(ca_features.index, test_size=0.2, random_state=42)
+    train_idx, test_idx = train_test_split(ca_features.index, test_size=0.2, random_state=0)
 
     ca_features['split'] = 'test'
     ca_features.loc[train_idx, 'split'] = 'train'
@@ -207,7 +216,7 @@ def load_bios():
     data = pd.DataFrame()
     for split in data_raw.keys():
         df = data_raw[split].to_pandas()
-        df = df.sample(frac=0.1, random_state=42)
+        df = df.sample(frac=0.1, random_state=0)
         df['split'] = split
         data = pd.concat([data, df], ignore_index=True)
     data_sampled = data.rename(columns={'hard_text': 'text', 'profession': 'label', 'gender': 'sensitive'})
@@ -261,7 +270,7 @@ def load_wikibias(protected_group):
         lambda x: classify_text(x, binary_categories['male'], binary_categories['female']))
     data_raw = data_raw[data_raw['sensitive'] != 2]
     data_raw = data_raw[['text', 'label', 'sensitive']]
-    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=42)
+    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=0)
 
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
@@ -298,7 +307,7 @@ def load_wikitalk(protected_group):
     data_raw = data_raw.rename(columns={'comment': 'text', 'attack': 'label'})
     data_raw['label'] = data_raw['label'].replace({False: 0, True: 1}).astype(int)
     data_raw = data_raw[['text', 'label', 'sensitive']]
-    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=42)
+    train_idx, test_idx = train_test_split(data_raw.index, test_size=0.2, random_state=0)
     data_raw['split'] = 'test'
     data_raw.loc[train_idx, 'split'] = 'train'
     print("loading wikitalk")
@@ -371,12 +380,16 @@ def load_jigsaw(protected_group):
     return processed_df
 
 def load_equibench(protected_group):
+    print("loading equibench", protected_group)
     all_data = pd.read_json('data/equibench.jsonl', lines=True)
     domain_data = all_data[all_data['domain'] == protected_group]
-    train_idx, test_idx = train_test_split(domain_data.index, test_size=0.2, random_state=42)
+    if len(domain_data) == 0:
+        print("equibench do not support type", protected_group)
+        return None
+    train_idx, test_idx = train_test_split(domain_data.index, test_size=0.2, random_state=0)
     domain_data['split'] = 'test'
     domain_data.loc[train_idx, 'split'] = 'train'
-    print("loading equibench")
+    
     print(domain_data)
     return domain_data
 

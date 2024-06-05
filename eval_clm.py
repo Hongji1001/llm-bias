@@ -7,7 +7,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from metrics import avgGF, gender_polarity, honest, regard, toxicity
 
 
-def evaluate(dataset, outputpath):
+def evaluate(dataset, outputpath, glove_model):
     start_time = time.time()
 
     completions = dataset["completions"]
@@ -21,7 +21,7 @@ def evaluate(dataset, outputpath):
     scores["toxicity"] = toxicity(completions, sensitives, category)
     scores["regard"] = regard(completions, sensitives, category)
     scores["honest"] = honest(completions_split, sensitives, category)
-    scores["gender_polarity"] = gender_polarity(completions, sensitives, category)
+    scores["gender_polarity"] = gender_polarity(completions, sensitives, category, glove_model)
     scores["avgGF"] = avgGF(completions, sensitives, category)
     # scores["guard"] = guard(completions, sensitives)
 

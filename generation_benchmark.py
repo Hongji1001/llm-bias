@@ -1,13 +1,17 @@
 import argparse
 from pathlib import Path
+import random
 
 import pandas as pd
 import torch
 import yaml
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
+from transformers import set_seed
 from eval_clm import evaluate
 from run_clm import gen_completions
+import numpy as np
+from gensim.models import KeyedVectors
 
 data_list = [
     "bold.jsonl", "imdb_new.jsonl", "realtoxic_new.jsonl", "jigsaw_new.jsonl",
@@ -19,6 +23,13 @@ data_list = [
 # 'openai-community/gpt2', 'xlnet/xlnet-base-cased', 'facebook/opt-1.3b', 'google/gemma-2b'
 # 'meta-llama/Llama-2-7b-chat-hf'
 
+def set_random_seed(seed_value):
+    random.seed(seed_value)
+    np.random.seed(seed_value)
+    torch.manual_seed(seed_value)
+    torch.cuda.manual_seed_all(seed_value)
+    set_seed(seed_value)
+
 def main():
     parser = argparse.ArgumentParser(
         description='Script to process model and dataset')
@@ -28,7 +39,7 @@ def main():
         required=False,
         nargs='+',
         default=[
-            'meta-llama/Llama-2-7b-chat-hf', 'openai-community/gpt2', 'xlnet/xlnet-base-cased', 'facebook/opt-1.3b',
+            'facebook/opt-1.3b',
         ],
         help=
         'The name or path of the model(s) to benchmark (provide multiple models separated by space)'
@@ -37,7 +48,7 @@ def main():
                         type=str,
                         required=False,
                         nargs='+',
-                        default=["bold.jsonl", "cnn_dailymail_new.jsonl", "bookcorpus_new.jsonl"],
+                        default=["cnn_dailymail_new.jsonl", "bold.jsonl"],
                         help='The dataset to benchmark')
     parser.add_argument('--bias_types',
                         type=str,
@@ -47,6 +58,7 @@ def main():
                         help='The type of bias to benchmark')
     args = parser.parse_args()
 
+    set_random_seed(0)
     dir_path = Path("outputs/completions")
     dir_path.mkdir(parents=True, exist_ok=True)
     if dir_path.exists():
@@ -71,7 +83,7 @@ def main():
                 
                 df = df.reset_index(drop=True)
                 model = AutoModelForCausalLM.from_pretrained(model_)
-                tokenizer = AutoTokenizer.from_pretrained(model_)
+                tokenizer = AutoTokenizer.from_pretrained('meta-llama/Llama-2-7b-chat-hf')
                 tokenizer.pad_token = tokenizer.eos_token
                 tokenizer.padding_side = 'left'
                 if "llama" in model_:
@@ -89,6 +101,11 @@ def main():
         print(f"Failed to create the directory {dir_path}.")
 
     # second step: eval completions
+    words_file = '~/.cache/GoogleNews-vectors-negative300-hard-debiased.txt'
+    print("loading", words_file)
+    glove_model = KeyedVectors.load_word2vec_format(words_file,
+                                                    binary=False,
+                                                    unicode_errors='ignore')
     for model_ in args.model_name_or_path:
         for data in args.datasets:
             for bias_type in args.bias_types:
@@ -102,7 +119,7 @@ def main():
                     continue 
                 df = pd.read_json(completions_filename, lines=True)
                 df = df.reset_index(drop=True)
-                evaluate(df, output_log)
+                evaluate(df, output_log, glove_model)
 
 
 if __name__ == '__main__':
