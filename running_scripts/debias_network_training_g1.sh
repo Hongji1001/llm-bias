@@ -2,7 +2,7 @@
 export TRANSFORMERS_CACHE="/data1/tianlong/.cache"
 export HOME=/data1/cache_tlc
 
-model_path=/data1/TxPLM/llm_ckpt/meta-llama/Meta-Llama-3-8B-instruct
+model_path=/data1/TxPLM/llm_ckpt/meta-llama/Meta-Llama-3-8B-Instruct/
 
 
 
