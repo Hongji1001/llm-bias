@@ -166,3 +166,7 @@ cython_debug/
 /outputs
 /checkpoint*
 /backup
+*.zip
+*.pdf
+*.svg
+*.pkl
